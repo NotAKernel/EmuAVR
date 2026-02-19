@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="EmuAVR/EmuAVR.vcxproj" Id="6db34f35-9cb5-46dc-bad2-65ff28466626" />
+</Solution>
