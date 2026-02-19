@@ -89,5 +89,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="demo2.hex" />
+    <None Include="demo_dump.hex" />
   </ItemGroup>
 </Project>

@@ -5,7 +5,7 @@
 #include <cinttypes>
 #include <cstdint>
 
-CPU::CPU(Bus& bus, Flash& flash) : bus_(bus), flash_(flash) {
+CPU::CPU(Bus & bus, Flash & flash) : bus_(bus), flash_(flash) {
     reset();
 }
 
@@ -56,7 +56,7 @@ uint64_t CPU::run(uint64_t maxCycles) {
 }
 
 static inline uint8_t sreg_get_c(uint8_t SREG) { return SREG & 1; }
-static inline void sreg_set_flag(uint8_t &SREG, int bit, bool v) {
+static inline void sreg_set_flag(uint8_t& SREG, int bit, bool v) {
     if (v) SREG |= (1 << bit);
     else SREG &= ~(1 << bit);
 }
@@ -83,23 +83,23 @@ uint32_t CPU::step() {
     {
         std::ostringstream ss;
         ss << "{\"type\":\"instr_fetch\",\"pc\":" << PC_
-           << ",\"word\":\"0x" << std::hex << std::setw(4) << std::setfill('0') << instr << std::dec << "\"}";
+            << ",\"word\":\"0x" << std::hex << std::setw(4) << std::setfill('0') << instr << std::dec << "\"}";
         emitJson(ss.str());
     }
 
-    // Small helpers
-    auto rd_rr_extract = [&](uint16_t w) -> std::pair<uint8_t,uint8_t> {
+    // Small helpers (kept to match project's style)
+    auto rd_rr_extract = [&](uint16_t w) -> std::pair<uint8_t, uint8_t> {
         uint8_t rd = static_cast<uint8_t>((w >> 4) & 0x1F);
         uint8_t rr = static_cast<uint8_t>((w & 0x0F) | ((w >> 5) & 0x10));
-        return {rd, rr};
-    };
+        return { rd, rr };
+        };
 
     auto io_addr_extract = [&](uint16_t w) -> uint8_t {
         // Best-effort extraction of the A field for IN/OUT encodings.
         uint8_t low4 = static_cast<uint8_t>(w & 0x0F);
         uint8_t high2 = static_cast<uint8_t>(((w >> 5) & 0x03) << 4); // place into bits 4..5
         return static_cast<uint8_t>(low4 | high2);
-    };
+        };
 
     auto push_byte = [&](uint8_t b) {
         SP_ = static_cast<uint16_t>(SP_ - 1);
@@ -107,7 +107,7 @@ uint32_t CPU::step() {
         std::ostringstream ss;
         ss << "{\"type\":\"mem\",\"op\":\"write\",\"space\":\"sram\",\"addr\":" << SP_ << ",\"value\":" << (int)b << ",\"pc\":" << PC_ << "}";
         emitJson(ss.str());
-    };
+        };
 
     auto pop_byte = [&]() -> uint8_t {
         uint8_t v = bus_.read(SP_);
@@ -116,11 +116,29 @@ uint32_t CPU::step() {
         emitJson(ss.str());
         SP_ = static_cast<uint16_t>(SP_ + 1);
         return v;
-    };
+        };
 
     // Quick decoders / masks used below
     uint16_t top4 = instr & 0xF000;
     uint16_t top6 = instr & 0xFC00;
+
+    // Common small extractors used for immediates/displacements
+    auto rd_imm = [&](uint16_t w) -> uint8_t { return static_cast<uint8_t>(16 + ((w >> 4) & 0x0F)); };
+    auto k_imm = [&](uint16_t w) -> uint8_t { return static_cast<uint8_t>((w & 0x000F) | ((w >> 8) & 0xF0)); };
+    auto rel12 = [&](uint16_t w) -> int16_t {
+        int16_t k = w & 0x0FFF;
+        if (k & 0x0800) k |= 0xF000;
+        return k;
+        };
+    auto rel7 = [&](uint16_t w) -> int8_t {
+        int8_t k = (w >> 3) & 0x7F;
+        if (k & 0x40) k |= 0x80;
+        return k;
+        };
+    auto disp6 = [&](uint16_t w) -> uint8_t {
+        return static_cast<uint8_t>(((w >> 7) & 0x18) | ((w >> 8) & 0x07) | ((w >> 1) & 0x20));
+        };
+    auto bit3 = [&](uint16_t w) -> uint8_t { return static_cast<uint8_t>(w & 0x07); };
 
     // 1) Simple control and call/return/branch
     if (instr == 0x0000) { // NOP
@@ -188,28 +206,13 @@ uint32_t CPU::step() {
         return 4;
     }
 
-    // BRxx family (full common set, best-effort)
+    // BRxx family (use existing wide mapping - best-effort)
     if (top4 == 0xF000) {
         // cond in bits 8..11, k7..k0 in low byte
         uint8_t cond = static_cast<uint8_t>((instr >> 8) & 0x0F);
         int8_t k8 = static_cast<int8_t>(instr & 0x00FF);
         bool take = false;
-        // Map cond codes (best-effort mapping):
-        // 0: BRBS? not used here -> treat as BREQ
-        // We'll map common conditions:
-        // 0 => BREQ (Z==1)
-        // 1 => BRNE (Z==0)
-        // 2 => BRCS (C==1)
-        // 3 => BRCC (C==0)
-        // 4 => BRSH (unsigned >=) -> treat as C==1
-        // 5 => BRLO -> C==0
-        // 6 => BRMI -> N==1
-        // 7 => BRPL -> N==0
-        // 8 => BRVS -> V==1
-        // 9 => BRVC -> V==0
-        // 10 => BRGE -> (S==V)
-        // 11 => BRLT -> (S!=V)
-        // 12..15 -> treat as unsupported cond -> not taken
+        // Map cond codes (best-effort mapping)
         uint8_t Z = (SREG_ >> 1) & 1;
         uint8_t C = (SREG_ >> 0) & 1;
         uint8_t N = (SREG_ >> 2) & 1;
@@ -217,25 +220,25 @@ uint32_t CPU::step() {
         uint8_t S = (SREG_ >> 4) & 1;
 
         switch (cond) {
-            case 0: take = Z; break;
-            case 1: take = !Z; break;
-            case 2: take = C; break;
-            case 3: take = !C; break;
-            case 4: take = C; break;
-            case 5: take = !C; break;
-            case 6: take = N; break;
-            case 7: take = !N; break;
-            case 8: take = V; break;
-            case 9: take = !V; break;
-            case 10: take = (S == V); break;
-            case 11: take = (S != V); break;
-            default:
-                {
-                    std::ostringstream ss; ss << "{\"type\":\"unsupported_branch_cond\",\"pc\":" << PC_ << ",\"cond\":" << (int)cond << "}";
-                    emitJson(ss.str());
-                    PC_ += 1;
-                    return 1;
-                }
+        case 0: take = Z; break;
+        case 1: take = !Z; break;
+        case 2: take = C; break;
+        case 3: take = !C; break;
+        case 4: take = C; break;
+        case 5: take = !C; break;
+        case 6: take = N; break;
+        case 7: take = !N; break;
+        case 8: take = V; break;
+        case 9: take = !V; break;
+        case 10: take = (S == V); break;
+        case 11: take = (S != V); break;
+        default:
+        {
+            std::ostringstream ss; ss << "{\"type\":\"unsupported_branch_cond\",\"pc\":" << PC_ << ",\"cond\":" << (int)cond << "}";
+            emitJson(ss.str());
+            PC_ += 1;
+            return 1;
+        }
         }
 
         uint16_t oldPC = PC_;
@@ -244,7 +247,8 @@ uint32_t CPU::step() {
             std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << oldPC << ",\"mnemonic\":\"BRxx\",\"cond\":" << (int)cond << ",\"taken\":true,\"offset\":" << (int)k8 << ",\"new_pc\":" << PC_ << ",\"cycles\":2}";
             emitJson(ss.str());
             return 2;
-        } else {
+        }
+        else {
             PC_ += 1;
             std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << oldPC << ",\"mnemonic\":\"BRxx\",\"cond\":" << (int)cond << ",\"taken\":false,\"offset\":" << (int)k8 << ",\"new_pc\":" << PC_ << ",\"cycles\":1}";
             emitJson(ss.str());
@@ -253,7 +257,9 @@ uint32_t CPU::step() {
     }
 
     // 2) IN / OUT / LDI (already implemented earlier variants) : leave as before
-    if ((instr & 0xF800) == 0xB000) { // IN
+
+    // IN
+    if ((instr & 0xF800) == 0xB000) {
         uint8_t rd = static_cast<uint8_t>((instr >> 4) & 0x1F);
         uint8_t A = io_addr_extract(instr);
         uint16_t memAddr = static_cast<uint16_t>(0x0020 + A);
@@ -263,7 +269,8 @@ uint32_t CPU::step() {
         emitJson(ss.str());
         PC_ += 1; return 1;
     }
-    if ((instr & 0xF800) == 0xB800) { // OUT
+    // OUT
+    if ((instr & 0xF800) == 0xB800) {
         uint8_t rr = static_cast<uint8_t>((instr >> 4) & 0x1F);
         uint8_t A = io_addr_extract(instr);
         uint16_t memAddr = static_cast<uint16_t>(0x0020 + A);
@@ -280,6 +287,61 @@ uint32_t CPU::step() {
         uint8_t d = static_cast<uint8_t>(16 + ((instr >> 4) & 0x0F));
         writeReg(d, K);
         std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"LDI\",\"dest\":\"R" << (int)d << "\",\"imm\":" << (int)K << ",\"cycles\":1}";
+        emitJson(ss.str());
+        PC_ += 1; return 1;
+    }
+
+    // SUBI (immediate subtraction Rd,K) - mask/pattern per provided table 0xF000/0x5000
+    if ((instr & 0xF000) == 0x5000) {
+        uint8_t K = static_cast<uint8_t>((instr & 0x000F) | ((instr >> 8) & 0xF0));
+        uint8_t d = static_cast<uint8_t>(16 + ((instr >> 4) & 0x0F));
+        uint8_t Rdr = readReg(d);
+        uint16_t res16 = (uint16_t)Rdr - (uint16_t)K;
+        uint8_t res = static_cast<uint8_t>(res16 & 0xFF);
+        bool H = ((Rdr & 0x0F) < (K & 0x0F));
+        bool C = (Rdr < K);
+        bool Z = (res == 0);
+        bool N = (res & 0x80) != 0;
+        bool V = (((Rdr ^ K) & (Rdr ^ res)) & 0x80) != 0;
+        bool S = N ^ V;
+        writeReg(d, res);
+        sreg_set_flag(SREG_, 5, H); sreg_set_flag(SREG_, 0, C); sreg_set_flag(SREG_, 1, Z);
+        sreg_set_flag(SREG_, 2, N); sreg_set_flag(SREG_, 3, V); sreg_set_flag(SREG_, 4, S);
+        std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"SUBI\",\"reg\":\"R" << (int)d << "\",\"imm\":" << (int)K << ",\"result\":" << (int)res << ",\"cycles\":1}";
+        emitJson(ss.str());
+        PC_ += 1; return 1;
+    }
+
+    // ANDI (immediate) - mask/pattern 0xF000/0x7000
+    if ((instr & 0xF000) == 0x7000) {
+        uint8_t K = static_cast<uint8_t>((instr & 0x000F) | ((instr >> 8) & 0xF0));
+        uint8_t d = static_cast<uint8_t>(16 + ((instr >> 4) & 0x0F));
+        uint8_t res = static_cast<uint8_t>(readReg(d) & K);
+        writeReg(d, res);
+        bool Z = (res == 0);
+        bool N = (res & 0x80) != 0;
+        bool V = false;
+        bool S = N ^ V;
+        sreg_set_flag(SREG_, 5, false); sreg_set_flag(SREG_, 0, false); sreg_set_flag(SREG_, 1, Z);
+        sreg_set_flag(SREG_, 2, N); sreg_set_flag(SREG_, 3, V); sreg_set_flag(SREG_, 4, S);
+        std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"ANDI\",\"reg\":\"R" << (int)d << "\",\"imm\":" << (int)K << ",\"result\":" << (int)res << ",\"cycles\":1}";
+        emitJson(ss.str());
+        PC_ += 1; return 1;
+    }
+
+    // ORI (immediate) - mask/pattern 0xF000/0x6000
+    if ((instr & 0xF000) == 0x6000) {
+        uint8_t K = static_cast<uint8_t>((instr & 0x000F) | ((instr >> 8) & 0xF0));
+        uint8_t d = static_cast<uint8_t>(16 + ((instr >> 4) & 0x0F));
+        uint8_t res = static_cast<uint8_t>(readReg(d) | K);
+        writeReg(d, res);
+        bool Z = (res == 0);
+        bool N = (res & 0x80) != 0;
+        bool V = false;
+        bool S = N ^ V;
+        sreg_set_flag(SREG_, 5, false); sreg_set_flag(SREG_, 0, false); sreg_set_flag(SREG_, 1, Z);
+        sreg_set_flag(SREG_, 2, N); sreg_set_flag(SREG_, 3, V); sreg_set_flag(SREG_, 4, S);
+        std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"ORI\",\"reg\":\"R" << (int)d << "\",\"imm\":" << (int)K << ",\"result\":" << (int)res << ",\"cycles\":1}";
         emitJson(ss.str());
         PC_ += 1; return 1;
     }
@@ -352,7 +414,7 @@ uint32_t CPU::step() {
         PC_ += 1; return 1;
     }
 
-    // AND/EOR/OR
+    // AND/EOR/OR (register)
     if (top6 == 0x2000 || top6 == 0x2400 || top6 == 0x2800) {
         auto [rd, rr] = rd_rr_extract(instr);
         uint8_t a = readReg(rd), b = readReg(rr), res = 0;
@@ -414,7 +476,8 @@ uint32_t CPU::step() {
             std::ostringstream ss2; ss2 << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"CPSE_SKIP\",\"skipped\":1}";
             emitJson(ss2.str());
             return 1; // treat as 1 cycle for this step (skipping will skip next)
-        } else {
+        }
+        else {
             PC_ += 1;
             return 1;
         }
@@ -446,6 +509,28 @@ uint32_t CPU::step() {
     auto set_X = [&](uint16_t v) { R_[26] = v & 0xFF; R_[27] = (v >> 8) & 0xFF; };
     auto set_Y = [&](uint16_t v) { R_[28] = v & 0xFF; R_[29] = (v >> 8) & 0xFF; };
     auto set_Z = [&](uint16_t v) { R_[30] = v & 0xFF; R_[31] = (v >> 8) & 0xFF; };
+
+    // LD/ST X- (added per provided table)
+    if ((instr & 0xFE0F) == 0x900E) { // LD Rd, -X
+        uint8_t d = static_cast<uint8_t>((instr >> 4) & 0x1F);
+        uint16_t addr = static_cast<uint16_t>(get_X() - 1);
+        set_X(addr);
+        uint8_t v = bus_.read(addr);
+        writeReg(d, v);
+        std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"LD\",\"mode\":\"-X\",\"rd\":\"R" << (int)d << "\",\"addr\":" << addr << ",\"value\":" << (int)v << "}";
+        emitJson(ss.str());
+        PC_ += 1; return 2;
+    }
+    if ((instr & 0xFE0F) == 0x920E) { // ST -X, Rr
+        uint8_t r = static_cast<uint8_t>((instr >> 4) & 0x1F);
+        uint16_t addr = static_cast<uint16_t>(get_X() - 1);
+        set_X(addr);
+        uint8_t v = readReg(r);
+        bus_.write(addr, v);
+        std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"ST\",\"mode\":\"-X\",\"rr\":\"R" << (int)r << "\",\"addr\":" << addr << ",\"value\":" << (int)v << "}";
+        emitJson(ss.str());
+        PC_ += 1; return 2;
+    }
 
     // LD Rd, X  (mask best-effort: 0x900C)
     if ((instr & 0xFE0F) == 0x900C) {
@@ -490,7 +575,31 @@ uint32_t CPU::step() {
         PC_ += 1; return 2;
     }
 
-    // Similar Y/Z variants (best-effort masks)
+    // Similar Y/Z variants as simple forms (keep after X variants)
+    // First handle LDD/STD with displacement for Y/Z (mask/pattern per provided table)
+    if ((instr & 0xD208) == 0x8008) { // LDD Y+/Z+ with displacement (best-effort)
+        uint8_t d = static_cast<uint8_t>((instr >> 4) & 0x1F);
+        uint8_t q = disp6(instr);
+        bool useZ = (instr & (1 << 3)) != 0;
+        uint16_t base = useZ ? get_Z() : get_Y();
+        uint8_t v = bus_.read(static_cast<uint16_t>(base + q));
+        writeReg(d, v);
+        std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"LDD\",\"mode\":\"" << (useZ ? "Z" : "Y") << "\",\"rd\":\"R" << (int)d << "\",\"addr\":" << (base + q) << ",\"value\":" << (int)v << "}";
+        emitJson(ss.str());
+        PC_ += 1; return 2;
+    }
+    if ((instr & 0xD208) == 0x8208) { // STD Y/Z with displacement (best-effort)
+        uint8_t r = static_cast<uint8_t>((instr >> 4) & 0x1F);
+        uint8_t q = disp6(instr);
+        bool useZ = (instr & (1 << 3)) != 0;
+        uint16_t base = useZ ? get_Z() : get_Y();
+        uint8_t v = readReg(r);
+        bus_.write(static_cast<uint16_t>(base + q), v);
+        std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"STD\",\"mode\":\"" << (useZ ? "Z" : "Y") << "\",\"rr\":\"R" << (int)r << "\",\"addr\":" << (base + q) << ",\"value\":" << (int)v << "}";
+        emitJson(ss.str());
+        PC_ += 1; return 2;
+    }
+
     if ((instr & 0xFE0F) == 0x9008) { // LD Rd, Y
         uint8_t d = static_cast<uint8_t>((instr >> 4) & 0x1F);
         uint16_t addr = get_Y();
@@ -574,7 +683,8 @@ uint32_t CPU::step() {
             std::ostringstream ss2; ss2 << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"SBx_SKIP\",\"skipped\":1}";
             emitJson(ss2.str());
             return 1;
-        } else {
+        }
+        else {
             PC_ += 1; return 1;
         }
     }
@@ -592,6 +702,32 @@ uint32_t CPU::step() {
         std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"SBI/CBI\",\"io\":" << (int)A << ",\"bit\":" << (int)b << ",\"value\":" << (int)v << "}";
         emitJson(ss.str());
         PC_ += 1; return 2;
+    }
+
+    // SEI / CLI exact encodings (common)
+    if (instr == 0x9478) {
+        // SEI
+        SREG_ |= (1 << 7); // I bit
+        emitJson("{\"type\":\"instruction\",\"pc\":" + std::to_string(PC_) + ",\"mnemonic\":\"SEI\",\"cycles\":1}");
+        PC_ += 1; return 1;
+    }
+    if (instr == 0x94F8) {
+        // CLI
+        SREG_ &= ~(1 << 7);
+        emitJson("{\"type\":\"instruction\",\"pc\":" + std::to_string(PC_) + ",\"mnemonic\":\"CLI\",\"cycles\":1}");
+        PC_ += 1; return 1;
+    }
+
+    // RETI exact match
+    if (instr == 0x9518) {
+        uint8_t low = pop_byte();
+        uint8_t high = pop_byte();
+        uint16_t newPC = static_cast<uint16_t>((high << 8) | low);
+        SREG_ |= (1 << 7); // set I
+        std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"RETI\",\"new_pc\":" << newPC << ",\"cycles\":4}";
+        emitJson(ss.str());
+        PC_ = newPC;
+        return 4;
     }
 
     // 8) LPM (read program memory byte into R0) - best-effort simple variant

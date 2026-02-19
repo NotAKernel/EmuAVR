@@ -155,6 +155,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="demo2.hex" />
+    <None Include="demo_dump.hex" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
