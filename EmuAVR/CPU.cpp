@@ -5,7 +5,7 @@
 #include <cinttypes>
 #include <cstdint>
 
-CPU::CPU(Bus & bus, Flash & flash) : bus_(bus), flash_(flash) {
+CPU::CPU(Bus& bus, Flash& flash) : bus_(bus), flash_(flash) {
     reset();
 }
 
@@ -151,7 +151,15 @@ uint32_t CPU::step() {
         int16_t k = instr & 0x0FFF;
         if (k & 0x0800) k |= 0xF000;
         uint16_t oldPC = PC_;
-        PC_ = static_cast<uint16_t>(PC_ + 1 + k);
+        uint16_t newPC = static_cast<uint16_t>(PC_ + 1 + k);
+        // Treat self-targeting RJMP (e.g. RJMP -1) as a program halt (stop) instead of an infinite loop.
+        if (newPC == oldPC) {
+            std::ostringstream ss;
+            ss << "{\"type\":\"halt\",\"pc\":" << oldPC << ",\"reason\":\"self_rjmp\"}";
+            emitJson(ss.str());
+            return 0; // signal halt to run()
+        }
+        PC_ = newPC;
         std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << oldPC << ",\"mnemonic\":\"RJMP\",\"offset\":" << k << ",\"new_pc\":" << PC_ << ",\"cycles\":2}";
         emitJson(ss.str());
         return 2;
