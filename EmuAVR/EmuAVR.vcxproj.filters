@@ -51,6 +51,9 @@
     <ClCompile Include="Toolchain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="JsonSocketServer.h">
+      <Filter>Header Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CPU.h">
@@ -90,5 +93,6 @@
   <ItemGroup>
     <None Include="demo2.hex" />
     <None Include="demo_dump.hex" />
+    <None Include="EmuGUI.py" />
   </ItemGroup>
 </Project>

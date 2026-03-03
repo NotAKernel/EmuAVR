@@ -13,52 +13,121 @@
 #include "Clock.h"
 #include "Toolchain.h"
 #include <filesystem>
+#include <thread>
+#include <chrono>
+#include <fstream>
+
 
 int main(int argc, char** argv) {
 
+    std::string hexPath;
+
     if (argc < 2) {
         std::cout << "Usage: EmuAVR <source.c | image.hex>\n";
+        std::cout << "   or: EmuAVR --socket-wait\n";
         std::cout << "If source.c is given and avr-gcc is on PATH, the tool will try to compile it.\n";
         return 0;
     }
 
     std::string input = argv[1];
-    std::string hexPath;
+
+    // Socket-wait mode: wait for GUI to create a temp file with the path
+    if (input == "--socket-wait") {
+        std::cout << "[EmuAVR] Starting in socket-wait mode...\n";
+        std::cout << "[EmuAVR] Waiting for: EmuAVR_pending.txt\n";
+
+        // Wait up to 30 seconds for the file to appear
+        int waitCount = 0;
+        while (waitCount < 300) {
+            if (std::filesystem::exists("EmuAVR_pending.txt")) {
+                // Read the file path
+                std::ifstream f("EmuAVR_pending.txt");
+                std::getline(f, hexPath);
+                f.close();
+
+                if (!hexPath.empty()) {
+                    std::cout << "[EmuAVR] Loaded file path: " << hexPath << "\n";
+                    break;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            waitCount++;
+        }
+
+        if (hexPath.empty()) {
+            std::cout << "[EmuAVR] Timeout waiting for file. Exiting.\n";
+            return 1;
+        }
+
+        // Clean up temp file
+        std::filesystem::remove("EmuAVR_pending.txt");
+
+    }
+    else {
+        hexPath = input;
+    }
+
     std::error_code ec;
 
-    if (std::filesystem::path(input).extension() == ".c") {
+    if (std::filesystem::path(hexPath).extension() == ".c") {
         // try to compile to hex
-        hexPath = "out_emavr.hex";
+        std::string compiled = "out_emavr.hex";
         std::string err;
-        bool ok = Toolchain::compileToHex(input, hexPath, err);
+        bool ok = Toolchain::compileToHex(hexPath, compiled, err);
         if (!ok) {
             std::cout << "[EmuAVR] Toolchain failed: " << err << "\n";
             std::cout << "[EmuAVR] If you don't have avr-gcc installed, you can pass a .hex file instead.\n";
             return 1;
         }
-    } else if (std::filesystem::path(input).extension() == ".hex") {
-        hexPath = input;
-    } else {
+        hexPath = compiled;
+    }
+    else if (std::filesystem::path(hexPath).extension() == ".hex") {
+        // Use as-is
+    }
+    else {
         std::cout << "[EmuAVR] Unsupported input file type. Provide a .c or .hex file.\n";
         return 1;
     }
 
+    if (input == "--socket-wait") {
+        std::cout << "[EmuAVR] Waiting for GUI to connect on port 5555...\n";
+
+        // Now this call will work perfectly!
+        if (CPU::getJsonServer().waitForConnection(30000)) {
+            std::cout << "[EmuAVR] GUI Connected! Starting simulation...\n";
+        }
+        else {
+            std::cout << "[EmuAVR] Timeout waiting for GUI. Running anyway...\n";
+        }
+    }
+
     // Setup bus and devices
     Bus bus;
-    auto sram = std::make_shared<SRAM>(2048);      // 2KB SRAM
+    auto sram = std::make_shared<SRAM>(2048);
     auto eeprom = std::make_shared<EEPROM>(512);
     auto portB = std::make_shared<Port>("B");
     auto uart0 = std::make_shared<UART>("USART0");
     auto spi0 = std::make_shared<SPI>("SPI0");
     auto twi0 = std::make_shared<TWI>("TWI0");
 
-    // Map devices into address space (simple example mapping)
-    bus.map(0x0100, 2048, sram);    // SRAM
-    bus.map(0x9000, 512, eeprom);   // EEPROM
-    bus.map(0x0020, 4, portB);      // PORTB range
-    bus.map(0x00C0, 4, uart0);
-    bus.map(0x0040, 4, spi0);
-    bus.map(0x0050, 4, twi0);
+    // Map I/O registers (0x00-0x3F)
+    auto dummy_io = std::make_shared<Port>("DUMMY_IO");
+
+    // Map I/O registers (0x00-0x5F)
+    bus.map(0x0000, 32, dummy_io);    // 0x00-0x1F
+    bus.map(0x0020, 16, portB);       // 0x20-0x2F
+    bus.map(0x0030, 48, dummy_io);    // 0x30-0x5F (Fills the gap for SPH/SPL!)
+
+    // Extended I/O (0x40-0xFF)
+    bus.map(0x0040, 4, spi0);         // SPI
+    bus.map(0x0050, 4, twi0);         // TWI
+    bus.map(0x00C0, 4, uart0);        // UART
+
+    // SRAM (0x0060+)
+    bus.map(0x0060, 2048, sram);
+
+    // EEPROM at data memory space (0x9000+)
+    bus.map(0x9000, 512, eeprom);
 
     // Load flash from HEX
     Flash flash;
@@ -71,11 +140,13 @@ int main(int argc, char** argv) {
     CPU cpu(bus, flash);
     Clock clk(16000000);
 
-    // Run: limit cycles to avoid runaway loops in this early stage
-    const uint64_t maxCycles = 100000;
+    // Run program
+    const uint64_t maxCycles = 10000;
     uint64_t cycles = cpu.run(maxCycles);
     clk.tick((uint32_t)cycles);
 
-    std::cout << "[EmuAVR] Execution finished. Cycles elapsed: " << clk.cyclesElapsed() << "\n";
+    std::cout << "[EmuAVR] Execution finished. Cycles elapsed: "
+        << clk.cyclesElapsed() << "\n";
+
     return 0;
 }

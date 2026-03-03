@@ -133,6 +133,7 @@
     <ClCompile Include="EEPROM.cpp" />
     <ClCompile Include="EmuAVR.cpp" />
     <ClCompile Include="Flash.cpp" />
+    <ClCompile Include="JsonSocketServer.h" />
     <ClCompile Include="Port.cpp" />
     <ClCompile Include="SPI.cpp" />
     <ClCompile Include="SRAM.cpp" />
@@ -156,6 +157,7 @@
   <ItemGroup>
     <None Include="demo2.hex" />
     <None Include="demo_dump.hex" />
+    <None Include="EmuGUI.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

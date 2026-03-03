@@ -5,6 +5,7 @@
 #include <string>
 #include "Bus.h"
 #include "Flash.h"
+#include "JsonSocketServer.h"
 
 class CPU {
 public:
@@ -27,6 +28,11 @@ public:
     // Direct access to bus for demo
     Bus& bus();
 
+    void stop() { keep_running_ = false; }
+    bool is_running() const { return keep_running_; }
+
+    static JsonSocketServer& getJsonServer();
+
 private:
     Bus& bus_;
     Flash& flash_;
@@ -34,6 +40,8 @@ private:
     uint16_t SP_;
     std::array<uint8_t, 32> R_;
     uint8_t SREG_;
+
+    std::atomic<bool> keep_running_{ true };
 
     // Helper to emit JSON event line
     void emitJson(const std::string& json);
