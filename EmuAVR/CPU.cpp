@@ -346,12 +346,46 @@ uint32_t CPU::step() {
 
     // LDI immediate
     else if ((instr & 0xF000) == 0xE000) {
-        uint8_t K = static_cast<uint8_t>((instr & 0x000F) | ((instr >> 8) & 0xF0));
+        uint8_t K_low = instr & 0x000F;
+        uint8_t K_high = (instr >> 8) & 0x000F;
+        uint8_t K = K_low | (K_high << 4);
         uint8_t d = static_cast<uint8_t>(16 + ((instr >> 4) & 0x0F));
         writeReg(d, K);
         std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"LDI\",\"dest\":\"R" << (int)d << "\",\"imm\":" << (int)K << ",\"cycles\":1}";
         emitJson(ss.str());
         PC_ += 1; c = 1;
+    }
+
+    // LDS (Load Direct from SRAM) - 32-bit instruction
+    else if ((instr & 0xFE00) == 0x9000) {
+        uint16_t addr = flash_.fetchWord(PC_ + 1);
+        uint8_t d = static_cast<uint8_t>((instr >> 4) & 0x1F);
+        uint8_t val = bus_.read(addr);
+        {
+            std::ostringstream ss;
+            ss << "{\"type\":\"mem\",\"op\":\"read\",\"space\":\"sram\",\"addr\":" << addr << ",\"value\":" << (int)val << ",\"pc\":" << PC_ << "}";
+            emitJson(ss.str());
+        }
+        writeReg(d, val);
+        std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"LDS\",\"dest\":\"R" << (int)d << "\",\"addr\":\"0x" << std::hex << std::setw(4) << std::setfill('0') << addr << std::dec << "\",\"value\":" << (int)val << ",\"cycles\":2}";
+        emitJson(ss.str());
+        PC_ += 2; c = 2;
+    }
+
+    // STS (Store Direct to SRAM) - 32-bit instruction
+    else if ((instr & 0xFE00) == 0x9200) {
+        uint16_t addr = flash_.fetchWord(PC_ + 1);
+        uint8_t d = static_cast<uint8_t>((instr >> 4) & 0x1F);
+        uint8_t val = readReg(d);
+        bus_.write(addr, val);
+        {
+            std::ostringstream ss;
+            ss << "{\"type\":\"mem\",\"op\":\"write\",\"space\":\"sram\",\"addr\":" << addr << ",\"value\":" << (int)val << ",\"pc\":" << PC_ << "}";
+            emitJson(ss.str());
+        }
+        std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"STS\",\"reg\":\"R" << (int)d << "\",\"addr\":\"0x" << std::hex << std::setw(4) << std::setfill('0') << addr << std::dec << "\",\"value\":" << (int)val << ",\"cycles\":2}";
+        emitJson(ss.str());
+        PC_ += 2; c = 2;
     }
 
     // SUBI
@@ -568,6 +602,16 @@ uint32_t CPU::step() {
         std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"POP\",\"reg\":" << (int)d << ",\"value\":" << (int)v << ",\"cycles\":2}";
         emitJson(ss.str());
         PC_ += 1; c = 2;
+    }
+
+    // MOV (Copy Register)
+    else if (top6 == 0x2C00) {
+        auto [rd, rr] = rd_rr_extract(instr);
+        uint8_t val = readReg(rr);
+        writeReg(rd, val);
+        std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"MOV\",\"rd\":\"R" << (int)rd << "\",\"rr\":\"R" << (int)rr << "\",\"value\":" << (int)val << ",\"cycles\":1}";
+        emitJson(ss.str());
+        PC_ += 1; c = 1;
     }
 
     // If we reached here, it's unsupported by our heuristics
