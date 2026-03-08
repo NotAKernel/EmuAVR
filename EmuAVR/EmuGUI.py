@@ -24,32 +24,28 @@ class JsonSocketReader(threading.Thread):
         self.file = None
 
     def run(self):
-        while not self.stop_event.is_set():
-            try:
-                self.sock = socket.create_connection((self.host, self.port), timeout=2.0)
-                self.file = self.sock.makefile('r', encoding='utf-8', newline='\n')
-                self.out_queue.put({"__meta__": "connected"})
-                while not self.stop_event.is_set():
-                    line = self.file.readline()
-                    if not line:
-                        break
-                    line = line.strip()
-                    if line:
-                        try:
-                            obj = json.loads(line)
-                            self.out_queue.put(obj)
-                        except Exception:
-                            self.out_queue.put({"__raw__": line})
-            except Exception as e:
-                self.out_queue.put({"__meta__": "connect_error", "error": str(e)})
-            finally:
-                if self.file: self.file.close()
-                if self.sock: self.sock.close()
-                self.file = None
-                self.sock = None
-            
-            if not self.stop_event.is_set():
-                self.stop_event.wait(1.0) # Wait before retry
+        try:
+            self.sock = socket.create_connection((self.host, self.port), timeout=2.0)
+            self.file = self.sock.makefile('r', encoding='utf-8', newline='\n')
+            self.out_queue.put({"__meta__": "connected"})
+            while not self.stop_event.is_set():
+                line = self.file.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if line:
+                    try:
+                        obj = json.loads(line)
+                        self.out_queue.put(obj)
+                    except Exception:
+                        self.out_queue.put({"__raw__": line})
+        except Exception as e:
+            self.out_queue.put({"__meta__": "connect_error", "error": str(e)})
+        finally:
+            if self.file: self.file.close()
+            if self.sock: self.sock.close()
+            self.file = None
+            self.sock = None
 
 
 class EventPump(QObject):
@@ -101,41 +97,21 @@ class MainWindow(QMainWindow):
         top_h = QHBoxLayout()
         v.addLayout(top_h)
 
-        conn_group = QGroupBox("JSON socket")
-        conn_layout = QHBoxLayout()
-        conn_group.setLayout(conn_layout)
-        self.host_edit = QLineEdit("127.0.0.1")
-        self.host_edit.setFixedWidth(100)
-        conn_layout.addWidget(self.host_edit)
-        self.port_spin = QSpinBox()
-        self.port_spin.setRange(1, 65535)
-        self.port_spin.setValue(5555)
-        conn_layout.addWidget(self.port_spin)
-        self.connect_btn = QPushButton("Connect")
-        self.connect_btn.clicked.connect(self.toggle_connect)
-        conn_layout.addWidget(self.connect_btn)
-        self.conn_status = QLabel("Disconnected")
-        conn_layout.addWidget(self.conn_status)
-        top_h.addWidget(conn_group)
-
-        loader_group = QGroupBox("Control")
-        loader_layout = QHBoxLayout()
-        loader_group.setLayout(loader_layout)
-        self.exe_path_label = QLineEdit()
-        loader_layout.addWidget(self.exe_path_label)
-        btn_exe = QPushButton("EXE")
-        btn_exe.clicked.connect(self.choose_exe)
-        loader_layout.addWidget(btn_exe)
+        control_group = QGroupBox("Control")
+        control_layout = QHBoxLayout()
+        control_group.setLayout(control_layout)
         self.file_path_label = QLineEdit()
-        loader_layout.addWidget(self.file_path_label)
-        btn_file = QPushButton("HEX")
-        btn_file.clicked.connect(self.choose_input_file)
-        loader_layout.addWidget(btn_file)
-        self.launch_btn = QPushButton("LAUNCH")
-        self.launch_btn.setStyleSheet("background-color: #e1f5fe; font-weight: bold;")
-        self.launch_btn.clicked.connect(self.launch_emulator)
-        loader_layout.addWidget(self.launch_btn)
-        top_h.addWidget(loader_group, 1)
+        self.file_path_label.setPlaceholderText("Select HEX/C file -->")
+        control_layout.addWidget(self.file_path_label)
+        btn_file = QPushButton("Hex/C")
+        btn_file.clicked.connect(self.launch_emulator)
+        control_layout.addWidget(btn_file)
+        self.clear_memory_btn = QPushButton("Clear All Memory")
+        self.clear_memory_btn.setStyleSheet("background-color: #ffcccc; font-weight: bold;")
+        self.clear_memory_btn.clicked.connect(self.clear_all_memory)
+        control_layout.addWidget(self.clear_memory_btn)
+        control_layout.addStretch()
+        top_h.addWidget(control_group, 1)
 
         mid_h = QHBoxLayout()
         v.addLayout(mid_h, 1)
@@ -204,37 +180,64 @@ class MainWindow(QMainWindow):
         self._update_mem_grid()
         self._update_pc_sp_sreg()
 
-    def choose_exe(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Emulator EXE", "", "*.exe")
-        if path: self.exe_path_label.setText(path)
-
     def choose_input_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Input File", "", "*.hex;*.c")
-        if path: self.file_path_label.setText(path)
+        path, _ = QFileDialog.getOpenFileName(self, "Select HEX or C File", "", "*.hex;*.c")
+        if path:
+            self.file_path_label.setText(path)
 
     def launch_emulator(self):
-        exe = self.exe_path_label.text().strip()
-        inp = self.file_path_label.text().strip()
-        if not os.path.isfile(exe) or not os.path.isfile(inp):
-            QMessageBox.warning(self, "Error", "Check file paths.")
+        """Prompt for file selection and start the emulator."""
+        self.choose_input_file()
+        hex_path = self.file_path_label.text().strip()
+        if hex_path:
+            self._start_emulator()
+
+    def _start_emulator(self):
+        """Load and start the emulator with the selected file."""
+        exe_path = "./StartUp/EmuAVR.exe"  # <-- Set your relative path here
+        
+        # Use the selected hex file from the text field
+        hex_path = self.file_path_label.text().strip()
+        if not hex_path:
+            self.log_view.append(f"<font color='red'>[Error] No hex file selected</font>")
             return
 
-        # Prepare connection
-        if not self.socket_thread or not self.socket_thread.is_alive():
-            self.toggle_connect()
+        # Resolve to absolute paths
+        exe_full = os.path.abspath(exe_path)
+        hex_full = os.path.abspath(hex_path)
+
+        if not os.path.isfile(exe_full):
+            self.log_view.append(f"<font color='red'>[Error] Emulator not found: {exe_full}</font>")
+            return
+
+        if not os.path.isfile(hex_full):
+            self.log_view.append(f"<font color='red'>[Error] Hex file not found: {hex_full}</font>")
+            return
+
+        # Establish socket connection
+        self._connect_socket()
 
         try:
+            # Write pending file path for emulator to read
             with open("EmuAVR_pending.txt", "w") as f:
-                f.write(os.path.abspath(inp))
+                f.write(hex_full)
             
             self.emulator_queue = Queue()
             self.emulator_process = subprocess.Popen(
-                [exe, "--socket-wait"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                [exe_full, "--socket-wait"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
             threading.Thread(target=self._read_emulator_output, daemon=True).start()
-            self.log_view.append("[GUI] Emulator started.")
+            self.log_view.append(f"<font color='green'>[GUI] Emulator started from {exe_full}</font>")
+            self.log_view.append(f"<font color='green'>[GUI] Loaded program: {hex_full}</font>")
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            self.log_view.append(f"<font color='red'>[Error] Failed to start emulator: {str(e)}</font>")
+
+    def _connect_socket(self):
+        """Establish socket connection to emulator."""
+        if not self.socket_thread or not self.socket_thread.is_alive():
+            self.socket_stop.clear()
+            self.socket_thread = JsonSocketReader("127.0.0.1", 5555, self.socket_queue, self.socket_stop)
+            self.socket_thread.start()
 
     def _read_emulator_output(self):
         while self.emulator_process.poll() is None:
@@ -246,26 +249,23 @@ class MainWindow(QMainWindow):
         for l in out.splitlines(): self.emulator_queue.put(("stdout", l))
         for l in err.splitlines(): self.emulator_queue.put(("stderr", l))
 
-    def toggle_connect(self):
-        if self.socket_thread and self.socket_thread.is_alive():
-            # 1. Signal the socket reader thread to stop
-            self.socket_stop.set()
-            
-            # 2. Terminate the emulator process if it's running
-            if self.emulator_process and self.emulator_process.poll() is None:
-                self.emulator_process.terminate()
-                self.log_view.append("<font color='orange'>[GUI] Emulator process terminated.</font>")
-            
-            self.connect_btn.setText("Connect")
-            self.conn_status.setText("Disconnected")
-        else:
-            # 3. Standard connection logic
-            self.socket_stop.clear()
-            self.socket_thread = JsonSocketReader(
-                self.host_edit.text(), self.port_spin.value(), self.socket_queue, self.socket_stop
-            )
-            self.socket_thread.start()
-            self.connect_btn.setText("Disconnect")
+    def clear_all_memory(self):
+        """Clear CPU registers and SRAM."""
+        reply = QMessageBox.question(
+            self, "Clear All Memory", 
+            "This will reset all CPU registers and SRAM. Continue?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.regs = [0] * 32
+            self.sram = {}
+            self.PC = 0
+            self.SP = 0x085F
+            self.SREG = 0
+            self._update_reg_table()
+            self._update_mem_grid()
+            self._update_pc_sp_sreg()
+            self.log_view.append("<font color='blue'>[GUI] All memory cleared.</font>")
 
     def _poll_queues(self):
         # Process Stdout/Stderr (Parsing JSON from logs if socket isn't ready)
@@ -290,7 +290,9 @@ class MainWindow(QMainWindow):
             try:
                 obj = self.socket_queue.get_nowait()
                 if "__meta__" in obj:
-                    self.conn_status.setText(obj.get("__meta__"))
+                    meta = obj.get("__meta__")
+                    if meta != "connected":
+                        self.log_view.append(f"<font color='orange'>[Socket] {meta}</font>")
                     continue
                 self.event_pump.json_received.emit(obj)
             except Empty: break

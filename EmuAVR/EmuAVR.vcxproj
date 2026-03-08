@@ -155,8 +155,6 @@
     <ClInclude Include="UART.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="demo2.hex" />
-    <None Include="demo_dump.hex" />
     <None Include="EmuGUI.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
