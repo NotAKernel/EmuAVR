@@ -137,7 +137,6 @@
     <ClCompile Include="Port.cpp" />
     <ClCompile Include="SPI.cpp" />
     <ClCompile Include="SRAM.cpp" />
-    <ClCompile Include="Toolchain.cpp" />
     <ClCompile Include="TWI.cpp" />
     <ClCompile Include="UART.cpp" />
   </ItemGroup>
@@ -150,7 +149,6 @@
     <ClInclude Include="Port.h" />
     <ClInclude Include="SPI.h" />
     <ClInclude Include="SRAM.h" />
-    <ClInclude Include="Toolchain.h" />
     <ClInclude Include="TWI.h" />
     <ClInclude Include="UART.h" />
   </ItemGroup>

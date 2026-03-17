@@ -13,86 +13,102 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Header Files\Core">
+      <UniqueIdentifier>{63fc6d89-76b5-41a5-bce1-a92848635627}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Memory">
+      <UniqueIdentifier>{0641d425-6a61-40a3-a142-468be78c3a90}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Communication">
+      <UniqueIdentifier>{85d3c468-596e-4d89-bee5-bb343b656c11}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Tools">
+      <UniqueIdentifier>{1e1a008c-3625-4596-970b-1e547893b2db}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Core">
+      <UniqueIdentifier>{007c49b2-a9b1-4239-b872-8837d6c6c690}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Memory">
+      <UniqueIdentifier>{4f5ffeda-e678-4a99-9e2a-6c3825481bfe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Communication">
+      <UniqueIdentifier>{eb901358-8d78-4e24-a9f6-049c5f1c1d10}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Tools">
+      <UniqueIdentifier>{e100930c-4202-49c6-81e8-368ff77a2f5b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="EmuAVR.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="JsonSocketServer.h">
+      <Filter>Header Files\Tools</Filter>
+    </ClCompile>
     <ClCompile Include="Bus.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="SPI.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="SRAM.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Flash.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="EEPROM.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Port.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="UART.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TWI.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Communication</Filter>
     </ClCompile>
     <ClCompile Include="Clock.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Core</Filter>
     </ClCompile>
     <ClCompile Include="CPU.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Core</Filter>
     </ClCompile>
-    <ClCompile Include="Toolchain.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="EEPROM.cpp">
+      <Filter>Source Files\Memory</Filter>
     </ClCompile>
-    <ClCompile Include="JsonSocketServer.h">
-      <Filter>Header Files</Filter>
+    <ClCompile Include="Flash.cpp">
+      <Filter>Source Files\Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="SPI.cpp">
+      <Filter>Source Files\Communication</Filter>
+    </ClCompile>
+    <ClCompile Include="SRAM.cpp">
+      <Filter>Source Files\Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="Port.cpp">
+      <Filter>Source Files\Communication</Filter>
+    </ClCompile>
+    <ClCompile Include="TWI.cpp">
+      <Filter>Source Files\Communication</Filter>
+    </ClCompile>
+    <ClCompile Include="UART.cpp">
+      <Filter>Source Files\Communication</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CPU.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Flash.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SRAM.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="EEPROM.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Core</Filter>
     </ClInclude>
     <ClInclude Include="Clock.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Core</Filter>
     </ClInclude>
-    <ClInclude Include="Bus.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="EEPROM.h">
+      <Filter>Header Files\Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="Flash.h">
+      <Filter>Header Files\Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="SRAM.h">
+      <Filter>Header Files\Memory</Filter>
     </ClInclude>
     <ClInclude Include="Port.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="UART.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Communication</Filter>
     </ClInclude>
     <ClInclude Include="SPI.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Communication</Filter>
     </ClInclude>
     <ClInclude Include="TWI.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Communication</Filter>
     </ClInclude>
-    <ClInclude Include="Toolchain.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="UART.h">
+      <Filter>Header Files\Communication</Filter>
+    </ClInclude>
+    <ClInclude Include="Bus.h">
+      <Filter>Header Files\Communication</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="demo2.hex" />
-    <None Include="demo_dump.hex" />
     <None Include="EmuGUI.py" />
   </ItemGroup>
 </Project>

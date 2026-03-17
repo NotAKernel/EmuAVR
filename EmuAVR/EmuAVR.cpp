@@ -11,7 +11,6 @@
 #include "TWI.h"
 #include "CPU.h"
 #include "Clock.h"
-#include "Toolchain.h"
 #include <filesystem>
 #include <thread>
 #include <chrono>
@@ -70,16 +69,9 @@ int main(int argc, char** argv) {
     std::error_code ec;
 
     if (std::filesystem::path(hexPath).extension() == ".c") {
-        // try to compile to hex
-        std::string compiled = "out_emavr.hex";
-        std::string err;
-        bool ok = Toolchain::compileToHex(hexPath, compiled, err);
-        if (!ok) {
-            std::cout << "[EmuAVR] Toolchain failed: " << err << "\n";
-            std::cout << "[EmuAVR] If you don't have avr-gcc installed, you can pass a .hex file instead.\n";
-            return 1;
-        }
-        hexPath = compiled;
+
+		std::cout << "[EmuAVR] Toolchain not implemented yet. Please compile your .c file to .hex using avr-gcc and provide the .hex file directly.\n";
+        return 1;
     }
     else if (std::filesystem::path(hexPath).extension() == ".hex") {
         // Use as-is
