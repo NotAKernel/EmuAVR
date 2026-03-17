@@ -1,0 +1,52 @@
+@startuml Execution_Flow
+title EmuAVR - Execution Flow Diagram
+
+start
+
+:Initialize Bus & Devices;
+note right
+  - Create SRAM, EEPROM, Port, UART, SPI, TWI
+  - Map devices to address ranges
+end note
+
+:Create CPU & Flash;
+:Load HEX file to Flash;
+
+:Create Clock;
+
+:Call cpu.run(maxCycles);
+note right
+  Default: 10,000 cycles
+end note
+
+while (cycles < maxCycles AND keep_running_) is (yes)
+  :Call cpu.step();
+  note right
+    - Fetch instruction from Flash
+    - Decode and execute
+    - Update registers/memory via Bus
+    - Return cycles consumed
+  end note
+  
+  :Emulate I/O devices;
+  note right
+    - Read/write Port, UART, SPI, TWI
+    via Bus read/write operations
+  end note
+  
+  :Emit JSON events;
+  note right
+    For debugger/UI communication
+  end note
+  
+endwhile (no)
+
+:Clock.tick(totalCycles);
+
+:Return elapsed cycles;
+
+:Print execution results;
+
+stop
+
+@enduml

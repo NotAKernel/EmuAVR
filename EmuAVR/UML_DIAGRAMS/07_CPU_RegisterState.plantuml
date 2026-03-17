@@ -1,0 +1,31 @@
+@startuml CPU_Registers_State
+title EmuAVR - CPU Internal State
+
+class CPU {
+    General Purpose Registers:
+    R0..R31: uint8_t[32]
+    
+    Special Registers:
+    PC: uint16_t (Program Counter)
+    SP: uint16_t (Stack Pointer)
+    SREG: uint8_t (Status Register)
+    
+    Control Flags:
+    keep_running_: atomic<bool>
+}
+
+note right of CPU
+  PC is word-addressed (16-bit words)
+  SP points to SRAM data space
+  SREG contains AVR status flags:
+    - C (Carry)
+    - Z (Zero)
+    - N (Negative)
+    - V (Overflow)
+    - S (Sign)
+    - H (Half Carry)
+    - T (Bit Copy)
+    - I (Global Interrupt Enable)
+end note
+
+@enduml

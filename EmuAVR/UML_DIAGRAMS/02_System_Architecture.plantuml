@@ -1,0 +1,38 @@
+@startuml System_Architecture
+title EmuAVR - System Architecture Diagram
+
+package "Emulator Core" {
+    component CPU
+    component Flash
+    component Bus
+}
+
+package "Memory Subsystem" {
+    component SRAM
+    component EEPROM
+}
+
+package "I/O Devices" {
+    component Port
+    component UART
+    component SPI
+    component TWI
+}
+
+package "System Support" {
+    component Clock
+    component JsonSocketServer
+}
+
+CPU --> Flash : fetches instructions
+CPU --> Bus : reads/writes
+Bus --> SRAM : memory access
+Bus --> EEPROM : memory access
+Bus --> Port : I/O access
+Bus --> UART : I/O access
+Bus --> SPI : I/O access
+Bus --> TWI : I/O access
+CPU --> Clock : timing
+CPU --> JsonSocketServer : debugger interface
+
+@enduml

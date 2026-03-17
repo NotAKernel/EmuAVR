@@ -1,0 +1,126 @@
+@startuml Class_Hierarchy
+title EmuAVR - Class Hierarchy Diagram
+!define DIRECTION top to bottom
+direction top to bottom
+
+skinparam classAttributeIconSize 0
+skinparam classFontSize 10
+skinparam classHeaderBackgroundColor #E8F4F8
+skinparam padding 5
+skinparam nodesep 5
+skinparam ranksep 10
+
+abstract class MemoryDevice {
+    {abstract} +read(addr: uint16_t): uint8_t
+    {abstract} +write(addr: uint16_t, value: uint8_t): void
+}
+
+class Bus {
+    -mappings_: vector<Mapping>
+    +map(base, size, dev)
+    +read(addr): uint8_t
+    +write(addr, value)
+}
+
+class SRAM {
+    -mem_: vector<uint8_t>
+    +SRAM(sizeBytes)
+    +read(addr): uint8_t
+    +write(addr, value)
+}
+
+class EEPROM {
+    -mem_: vector<uint8_t>
+    +EEPROM(sizeBytes)
+    +read(addr): uint8_t
+    +write(addr, value)
+}
+
+class Port {
+    -name_: string
+    -regs_: array<uint8_t, 3>
+    +Port(name)
+    +read(addr): uint8_t
+    +write(addr, value)
+}
+
+class UART {
+    -name_: string
+    -dataReg_: uint8_t
+    -statusReg_: uint8_t
+    +UART(name)
+    +read(addr): uint8_t
+    +write(addr, value)
+}
+
+class SPI {
+    -name_: string
+    -reg_: uint8_t
+    +SPI(name)
+    +read(addr): uint8_t
+    +write(addr, value)
+}
+
+class TWI {
+    -name_: string
+    -reg_: uint8_t
+    +TWI(name)
+    +read(addr): uint8_t
+    +write(addr, value)
+}
+
+class CPU {
+    -bus_: Bus
+    -flash_: Flash
+    -PC_: uint16_t
+    -SP_: uint16_t
+    -R_: array<uint8_t, 32>
+    -SREG_: uint8_t
+    -keep_running_: atomic<bool>
+    +CPU(bus: Bus, flash: Flash)
+    +reset(): void
+    +readReg(reg: uint8_t): uint8_t
+    +writeReg(reg: uint8_t, value: uint8_t): void
+    +run(maxCycles: uint64_t): uint64_t
+    +step(): uint32_t
+    +bus(): Bus
+    +stop(): void
+    +is_running(): bool
+    +{static} getJsonServer(): JsonSocketServer
+    -emitJson(json: string): void
+}
+
+class Flash {
+    -words_: vector<uint16_t>
+    +Flash(words: size_t)
+    +loadWords(data: vector<uint16_t>): void
+    +fetchWord(wordAddr: uint32_t): uint16_t
+    +sizeWords(): size_t
+    +loadFromHex(path: string, error: string): bool
+}
+
+class Clock {
+    -cycles_: uint64_t
+    -freqHz_: uint32_t
+    +Clock(hz: uint32_t)
+    +tick(cycles: uint32_t): void
+    +cyclesElapsed(): uint64_t
+}
+
+class JsonSocketServer {
+    +waitForConnection(timeout: int): bool
+}
+
+MemoryDevice <|-- SRAM
+MemoryDevice <|-- EEPROM
+MemoryDevice <|-- Port
+MemoryDevice <|-- UART
+MemoryDevice <|-- SPI
+MemoryDevice <|-- TWI
+
+Bus o-- "many" MemoryDevice : manages
+CPU o-- Bus : uses
+CPU o-- Flash : uses
+CPU -- JsonSocketServer : static access
+
+@enduml

@@ -37,6 +37,9 @@
     <Filter Include="Source Files\Tools">
       <UniqueIdentifier>{e100930c-4202-49c6-81e8-368ff77a2f5b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Resource Files\UML">
+      <UniqueIdentifier>{38a08816-8e39-4521-8157-239625d69cd4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="EmuAVR.cpp">
@@ -110,5 +113,29 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="EmuGUI.py" />
+    <None Include="UML_DIAGRAMS\01_Class_Hierarchy.plantuml">
+      <Filter>Resource Files\UML</Filter>
+    </None>
+    <None Include="UML_DIAGRAMS\02_System_Architecture.plantuml">
+      <Filter>Resource Files\UML</Filter>
+    </None>
+    <None Include="UML_DIAGRAMS\03_Execution_Flow.plantuml">
+      <Filter>Resource Files\UML</Filter>
+    </None>
+    <None Include="UML_DIAGRAMS\04_Memory_Layout.plantuml">
+      <Filter>Resource Files\UML</Filter>
+    </None>
+    <None Include="UML_DIAGRAMS\05_Bus_Interaction.plantuml">
+      <Filter>Resource Files\UML</Filter>
+    </None>
+    <None Include="UML_DIAGRAMS\06_MemoryDevice_Pattern.plantuml">
+      <Filter>Resource Files\UML</Filter>
+    </None>
+    <None Include="UML_DIAGRAMS\07_CPU_RegisterState.plantuml">
+      <Filter>Resource Files\UML</Filter>
+    </None>
+    <None Include="UML_DIAGRAMS\08_Component_Dependencies.plantuml">
+      <Filter>Resource Files\UML</Filter>
+    </None>
   </ItemGroup>
 </Project>

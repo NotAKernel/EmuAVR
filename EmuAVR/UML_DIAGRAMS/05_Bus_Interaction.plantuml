@@ -1,0 +1,40 @@
+@startuml Bus_Interaction
+title EmuAVR - Bus Communication Diagram
+
+actor CPU
+participant Bus
+participant SRAM
+participant Port
+participant UART
+
+CPU ->> Bus: write(0x0025, 0xFF)
+activate Bus
+Bus ->> Port: write(0x05, 0xFF)
+activate Port
+Port ->> Port: Update PORT register
+Port -->> Bus
+deactivate Port
+Bus -->> CPU
+deactivate Bus
+
+CPU ->> Bus: read(0x0100)
+activate Bus
+Bus ->> SRAM: read(0x00A0)
+activate SRAM
+SRAM -->> Bus: 0x42
+deactivate SRAM
+Bus -->> CPU: 0x42
+deactivate Bus
+
+CPU ->> Bus: write(0x00C0, 0x55)
+activate Bus
+Bus ->> UART: write(0x00, 0x55)
+activate UART
+UART ->> UART: Update data register
+UART ->> UART: Emit output character
+UART -->> Bus
+deactivate UART
+Bus -->> CPU
+deactivate Bus
+
+@enduml

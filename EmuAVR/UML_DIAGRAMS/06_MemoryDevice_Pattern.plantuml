@@ -1,0 +1,35 @@
+@startuml MemoryDevice_Pattern
+title EmuAVR - MemoryDevice Design Pattern
+
+interface MemoryDevice {
+    {abstract} +read(addr: uint16_t): uint8_t
+    {abstract} +write(addr: uint16_t, value: uint8_t): void
+}
+
+note right of MemoryDevice
+  This is an abstract base class
+  that defines the interface for
+  all memory-mapped devices.
+  
+  Implementations handle device-local
+  addresses (offset from mapping base).
+end note
+
+class ConcreteDeviceA {
+    -internalState_: Object
+    +read(addr: uint16_t): uint8_t
+    +write(addr: uint16_t, value: uint8_t): void
+    -handleRegisterAccess()
+}
+
+class ConcreteDeviceB {
+    -buffer_: vector<uint8_t>
+    +read(addr: uint16_t): uint8_t
+    +write(addr: uint16_t, value: uint8_t): void
+    -updateBuffer()
+}
+
+MemoryDevice <|.. ConcreteDeviceA : implements
+MemoryDevice <|.. ConcreteDeviceB : implements
+
+@enduml

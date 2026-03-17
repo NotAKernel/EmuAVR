@@ -1,0 +1,15 @@
+@startuml Memory_Layout
+title EmuAVR - Memory Address Space Layout
+
+rectangle "Address Space" as mem {
+    rectangle "I/O Registers\n(0x0000-0x001F)" as io1 #FFB6C1
+    rectangle "Port B\n(0x0020-0x002F)" as portb #87CEEB
+    rectangle "I/O Registers\n(0x0030-0x005F)" as io2 #FFB6C1
+    rectangle "SPI\n(0x0040-0x0044)" as spi #90EE90
+    rectangle "TWI\n(0x0050-0x0054)" as twi #90EE90
+    rectangle "UART\n(0x00C0-0x00C3)" as uart #90EE90
+    rectangle "SRAM\n(0x0060-0x0860)" as sram #FFA500
+    rectangle "EEPROM Data Space\n(0x9000-0x91FF)" as eeprom #FFD700
+}
+
+@enduml

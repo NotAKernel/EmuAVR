@@ -1,0 +1,24 @@
+@startuml Component_Dependencies
+title EmuAVR - Component Dependency Graph
+
+component Flash
+component Bus
+
+Bus ..> "0..*" MemoryDevice : depends on
+
+SRAM --|> MemoryDevice : implements
+EEPROM --|> MemoryDevice : implements
+Port --|> MemoryDevice : implements
+UART --|> MemoryDevice : implements
+SPI --|> MemoryDevice : implements
+TWI --|> MemoryDevice : implements
+
+CPU o-- Bus : composes
+CPU o-- Flash : composes
+
+Clock -->  CPU : measures
+JsonSocketServer --> CPU : communicates with
+
+Bus --> "1..*" MemoryDevice : manages
+
+@enduml
