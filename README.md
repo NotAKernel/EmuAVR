@@ -30,7 +30,7 @@ The UML_Diagrams folder has a system hierarchy in PlantUML format. In order to v
 
 The structure is best viewed in Visual Studio, as it uses filters instead of folders to split up the components logically.
 
-The Core is made up of the CPU and the Clock. The Communication folder contains the Bus, Ports and communication methods. Memory contains Flash, EEPROM and SRAM. It is structured to model the AVR ATmega328p as closely as possible, to facilitate a true emulation.
+The Core is made up of the CPU and the Clock. Communication contains the Bus, Ports and communication methods. Memory contains Flash, EEPROM and SRAM. It is structured to model the AVR ATmega328p as closely as possible, to facilitate a true emulation.
 
 ---
 
