@@ -10,6 +10,8 @@ The project primarily consists of:
 - An Emulator of the AVR ATmega328p, coded in C++
 - A JSON web socket, used for communication between the GUI and the Emulator
 
+The project was developed and built in Visual Studio, thus it is best viewed and used within their IDE. To open it, double click 'EmuAVR.slnx' in your file explorer and choose to open with Visual Studio - or open the project from within the IDE itself.
+
 Each time the emulator is modified/updated, the project is built to produce a new .exe file. This file is then moved to the StartUp folder, which is pointed to by the GUI as the location to find the emulator. With this .exe, the GUI can now run the emulator from within itself without the user needing to specify the file location.
 
 > (NOTE: if building the project yourself in either Debug or Release, please ensure your Visual Studio toolset is compatible. If not, install it from the Visual Studio interface.)
