@@ -1,24 +1,29 @@
 #include "Port.h"
 
-Port::Port(const std::string & name) : name_(name) {
+Port::Port(const std::string& name) : name_(name) {
     regs_.fill(0);
 }
 
 uint8_t Port::read(uint16_t addr) {
-    if (addr >= regs_.size()) {
-        std::cout << "[Port " << name_ << "] Read out of range offset " << addr << "\n";
-        return 0xFF;
-    }
-    uint8_t v = regs_[addr];
-    std::cout << "[Port " << name_ << "] Read offset " << addr << " => 0x" << std::hex << (uint32_t)v << std::dec << "\n";
-    return v;
+    if (addr >= regs_.size()) return 0xFF;
+    return regs_[addr]; // Silent read
 }
 
 void Port::write(uint16_t addr, uint8_t value) {
-    if (addr >= regs_.size()) {
-        std::cout << "[Port " << name_ << "] Write out of range offset " << addr << "\n";
-        return;
-    }
+    if (addr >= regs_.size()) return;
+
+    uint8_t old_value = regs_[addr];
     regs_[addr] = value;
-    std::cout << "[Port " << name_ << "] Write offset " << addr << " <= 0x" << std::hex << (uint32_t)value << std::dec << "\n";
+
+    if (addr == 2) {
+        bool was_on = (old_value > 0);
+        bool is_on = (value > 0);
+
+        if (!was_on && is_on) {
+            std::cout << "[Port " << name_ << "] ---> [ LED STATUS: ON ]" << std::endl;
+        }
+        else if (was_on && !is_on) {
+            std::cout << "[Port " << name_ << "] ---> [ LED STATUS: OFF ]" << std::endl;
+        }
+    }
 }

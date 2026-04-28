@@ -24,10 +24,23 @@ class JsonSocketReader(threading.Thread):
         self.file = None
 
     def run(self):
+        # --- Retry loop to wait for C++ to boot up ---
+        connected = False
+        while not self.stop_event.is_set() and not connected:
+            try:
+                self.sock = socket.create_connection((self.host, self.port), timeout=2.0)
+                connected = True
+            except (ConnectionRefusedError, socket.timeout, OSError):
+                # Server isn't awake yet, sleep for 0.5s and try again
+                time.sleep(0.5)
+
+        if self.stop_event.is_set():
+            return
+
         try:
-            self.sock = socket.create_connection((self.host, self.port), timeout=2.0)
             self.file = self.sock.makefile('r', encoding='utf-8', newline='\n')
             self.out_queue.put({"__meta__": "connected"})
+            
             while not self.stop_event.is_set():
                 line = self.file.readline()
                 if not line:
@@ -137,6 +150,13 @@ class MainWindow(QMainWindow):
         self.sreg_lbl = QLabel("0x00")
         self.sreg_lbl.setStyleSheet("font-weight: bold; color: red; font-family: monospace; font-size: 14px;")
         state_h.addWidget(self.sreg_lbl)
+        state_h.addStretch()
+        state_h.addWidget(QLabel("LED (PB5):"))
+        self.led_indicator = QLabel()
+        self.led_indicator.setFixedSize(20, 20)
+        # Start in "OFF" state (Dark Red)
+        self.led_indicator.setStyleSheet("background-color: #550000; border-radius: 10px; border: 2px solid #220000;")
+        state_h.addWidget(self.led_indicator)
         regs_layout.addLayout(state_h)
         mid_h.addWidget(regs_group, 1)
 
@@ -194,15 +214,13 @@ class MainWindow(QMainWindow):
 
     def _start_emulator(self):
         """Load and start the emulator with the selected file."""
-        exe_path = "./StartUp/EmuAVR.exe"  # <-- Set your relative path here
+        exe_path = "./StartUp/EmuAVR.exe" 
         
-        # Use the selected hex file from the text field
         hex_path = self.file_path_label.text().strip()
         if not hex_path:
             self.log_view.append(f"<font color='red'>[Error] No hex file selected</font>")
             return
 
-        # Resolve to absolute paths
         exe_full = os.path.abspath(exe_path)
         hex_full = os.path.abspath(hex_path)
 
@@ -214,11 +232,9 @@ class MainWindow(QMainWindow):
             self.log_view.append(f"<font color='red'>[Error] Hex file not found: {hex_full}</font>")
             return
 
-        # Establish socket connection
         self._connect_socket()
 
         try:
-            # Write pending file path for emulator to read
             with open("EmuAVR_pending.txt", "w") as f:
                 f.write(hex_full)
             
@@ -268,12 +284,20 @@ class MainWindow(QMainWindow):
             self.log_view.append("<font color='blue'>[GUI] All memory cleared.</font>")
 
     def _poll_queues(self):
-        # Process Stdout/Stderr (Parsing JSON from logs if socket isn't ready)
+        # Process Stdout/Stderr
         for _ in range(50):
             try:
                 msg_type, text = self.emulator_queue.get_nowait()
                 if msg_type == "stdout":
                     self.log_view.append(f"<font color='gray'>[Out] {text}</font>")
+                    
+                    # NEW: Watch for the LED Status string explicitly
+                    if "[Port B] ---> [ LED STATUS:" in text:
+                        if "ON" in text:
+                            self.led_indicator.setStyleSheet("background-color: #00FF00; border-radius: 10px; border: 2px solid #005500;") # Green
+                        elif "OFF" in text:
+                            self.led_indicator.setStyleSheet("background-color: #550000; border-radius: 10px; border: 2px solid #220000;") # Red
+
                     # Attempt to parse JSON if line looks like it
                     if "{" in text and "}" in text:
                         try:
@@ -311,6 +335,7 @@ class MainWindow(QMainWindow):
             if addr is not None:
                 self.sram[addr] = val & 0xFF
                 self._update_mem_grid()
+                # LED memory-watching logic removed as it is now handled by stdout parsing
         
         elif t in ["cpu_state", "instruction", "instr_fetch"]:
             if "pc" in obj: self.PC = obj["pc"]
@@ -321,7 +346,7 @@ class MainWindow(QMainWindow):
             if "sreg" in obj: 
                 try: self.SREG = int(str(obj["sreg"]), 16) if 'x' in str(obj["sreg"]) else int(obj["sreg"])
                 except: pass
-            self._update_pc_sp_sreg()
+            self._update_pc_sp_sreg()                           
 
     def _update_reg_table(self):
         self.reg_table.setUpdatesEnabled(False)
