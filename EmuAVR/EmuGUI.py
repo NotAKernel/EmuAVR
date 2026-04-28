@@ -24,14 +24,12 @@ class JsonSocketReader(threading.Thread):
         self.file = None
 
     def run(self):
-        # --- Retry loop to wait for C++ to boot up ---
         connected = False
         while not self.stop_event.is_set() and not connected:
             try:
                 self.sock = socket.create_connection((self.host, self.port), timeout=2.0)
                 connected = True
             except (ConnectionRefusedError, socket.timeout, OSError):
-                # Server isn't awake yet, sleep for 0.5s and try again
                 time.sleep(0.5)
 
         if self.stop_event.is_set():
@@ -53,7 +51,8 @@ class JsonSocketReader(threading.Thread):
                     except Exception:
                         self.out_queue.put({"__raw__": line})
         except Exception as e:
-            self.out_queue.put({"__meta__": "connect_error", "error": str(e)})
+            if not self.stop_event.is_set():
+                self.out_queue.put({"__meta__": "connect_error", "error": str(e)})
         finally:
             if self.file: self.file.close()
             if self.sock: self.sock.close()
@@ -90,16 +89,12 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         
-        # Faster polling (20ms) to ensure we catch rapid bursts of data
         self.poll_timer = QTimer(self)
         self.poll_timer.timeout.connect(self._poll_queues)
         self.poll_timer.start(20)
 
     def closeEvent(self, event):
-        # Kill the emulator if the GUI is closed
-        if self.emulator_process and self.emulator_process.poll() is None:
-            self.emulator_process.kill()
-        self.socket_stop.set()
+        self.force_stop()
         event.accept()
         
     def _build_ui(self):
@@ -113,23 +108,32 @@ class MainWindow(QMainWindow):
         control_group = QGroupBox("Control")
         control_layout = QHBoxLayout()
         control_group.setLayout(control_layout)
+        
         self.file_path_label = QLineEdit()
         self.file_path_label.setPlaceholderText("Select HEX/C file -->")
         control_layout.addWidget(self.file_path_label)
+        
         btn_file = QPushButton("Hex/C")
         btn_file.clicked.connect(self.launch_emulator)
         control_layout.addWidget(btn_file)
+
+        # NEW: Force Stop Button
+        self.stop_btn = QPushButton("Force Stop")
+        self.stop_btn.setStyleSheet("background-color: #ff4d4d; color: white; font-weight: bold;")
+        self.stop_btn.clicked.connect(self.force_stop)
+        control_layout.addWidget(self.stop_btn)
+
         self.clear_memory_btn = QPushButton("Clear All Memory")
-        self.clear_memory_btn.setStyleSheet("background-color: #ffcccc; font-weight: bold;")
-        self.clear_memory_btn.clicked.connect(self.clear_all_memory)
+        self.clear_memory_btn.setStyleSheet("background-color: #f0f0f0; font-weight: normal;")
+        self.clear_memory_btn.clicked.connect(self.clear_all_memory_manual)
         control_layout.addWidget(self.clear_memory_btn)
+        
         control_layout.addStretch()
         top_h.addWidget(control_group, 1)
 
         mid_h = QHBoxLayout()
         v.addLayout(mid_h, 1)
 
-        # Left: Registers
         regs_group = QGroupBox("CPU Registers")
         regs_layout = QVBoxLayout(regs_group)
         self.reg_table = QTableWidget(16, 2)
@@ -154,13 +158,11 @@ class MainWindow(QMainWindow):
         state_h.addWidget(QLabel("LED (PB5):"))
         self.led_indicator = QLabel()
         self.led_indicator.setFixedSize(20, 20)
-        # Start in "OFF" state (Dark Red)
         self.led_indicator.setStyleSheet("background-color: #550000; border-radius: 10px; border: 2px solid #220000;")
         state_h.addWidget(self.led_indicator)
         regs_layout.addLayout(state_h)
         mid_h.addWidget(regs_group, 1)
 
-        # Right: Memory & Logs
         right_v = QVBoxLayout()
         mid_h.addLayout(right_v, 2)
 
@@ -210,26 +212,19 @@ class MainWindow(QMainWindow):
         self.choose_input_file()
         hex_path = self.file_path_label.text().strip()
         if hex_path:
+            # AUTO-RESET before running new file
+            self.reset_internal_state()
             self._start_emulator()
 
     def _start_emulator(self):
-        """Load and start the emulator with the selected file."""
         exe_path = "./StartUp/EmuAVR.exe" 
-        
         hex_path = self.file_path_label.text().strip()
-        if not hex_path:
-            self.log_view.append(f"<font color='red'>[Error] No hex file selected</font>")
-            return
-
+        
         exe_full = os.path.abspath(exe_path)
         hex_full = os.path.abspath(hex_path)
 
         if not os.path.isfile(exe_full):
             self.log_view.append(f"<font color='red'>[Error] Emulator not found: {exe_full}</font>")
-            return
-
-        if not os.path.isfile(hex_full):
-            self.log_view.append(f"<font color='red'>[Error] Hex file not found: {hex_full}</font>")
             return
 
         self._connect_socket()
@@ -243,62 +238,80 @@ class MainWindow(QMainWindow):
                 [exe_full, "--socket-wait"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
             threading.Thread(target=self._read_emulator_output, daemon=True).start()
-            self.log_view.append(f"<font color='green'>[GUI] Emulator started from {exe_full}</font>")
-            self.log_view.append(f"<font color='green'>[GUI] Loaded program: {hex_full}</font>")
+            self.log_view.append(f"<font color='green'>[GUI] Emulator started. Program: {os.path.basename(hex_full)}</font>")
         except Exception as e:
-            self.log_view.append(f"<font color='red'>[Error] Failed to start emulator: {str(e)}</font>")
+            self.log_view.append(f"<font color='red'>[Error] Failed to start: {str(e)}</font>")
 
-    def _connect_socket(self):
-        """Establish socket connection to emulator."""
-        if not self.socket_thread or not self.socket_thread.is_alive():
-            self.socket_stop.clear()
-            self.socket_thread = JsonSocketReader("127.0.0.1", 5555, self.socket_queue, self.socket_stop)
-            self.socket_thread.start()
-
-    def _read_emulator_output(self):
-        while self.emulator_process.poll() is None:
-            line = self.emulator_process.stdout.readline()
-            if line: self.emulator_queue.put(("stdout", line.strip()))
+    def force_stop(self):
+        """Immediately halt execution and stop data processing."""
+        self.socket_stop.set()
         
-        # Flush remaining
-        out, err = self.emulator_process.communicate()
-        for l in out.splitlines(): self.emulator_queue.put(("stdout", l))
-        for l in err.splitlines(): self.emulator_queue.put(("stderr", l))
+        if self.emulator_process and self.emulator_process.poll() is None:
+            self.emulator_process.kill()
+        
+        # Drain queues to stop UI updates immediately
+        while not self.socket_queue.empty():
+            try: self.socket_queue.get_nowait()
+            except Empty: break
+        while not self.emulator_queue.empty():
+            try: self.emulator_queue.get_nowait()
+            except Empty: break
+            
+        self.log_view.append("<font color='red'>[GUI] Execution Halted.</font>")
 
-    def clear_all_memory(self):
-        """Clear CPU registers and SRAM."""
+    def reset_internal_state(self):
+        """Internal logic to clear state without prompts."""
+        self.regs = [0] * 32
+        self.sram = {}
+        self.PC = 0
+        self.SP = 0x085F
+        self.SREG = 0
+        self.led_indicator.setStyleSheet("background-color: #550000; border-radius: 10px; border: 2px solid #220000;")
+        self._update_reg_table()
+        self._update_mem_grid()
+        self._update_pc_sp_sreg()
+        self.log_view.append("<font color='blue'>[GUI] Internal state reset for new run.</font>")
+
+    def clear_all_memory_manual(self):
         reply = QMessageBox.question(
             self, "Clear All Memory", 
             "This will reset all CPU registers and SRAM. Continue?",
             QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            self.regs = [0] * 32
-            self.sram = {}
-            self.PC = 0
-            self.SP = 0x085F
-            self.SREG = 0
-            self._update_reg_table()
-            self._update_mem_grid()
-            self._update_pc_sp_sreg()
-            self.log_view.append("<font color='blue'>[GUI] All memory cleared.</font>")
+            self.reset_internal_state()
+
+    def _connect_socket(self):
+        if not self.socket_thread or not self.socket_thread.is_alive():
+            self.socket_stop.clear()
+            self.socket_thread = JsonSocketReader("127.0.0.1", 5555, self.socket_queue, self.socket_stop)
+            self.socket_thread.start()
+
+    def _read_emulator_output(self):
+        try:
+            while self.emulator_process and self.emulator_process.poll() is None:
+                line = self.emulator_process.stdout.readline()
+                if line: self.emulator_queue.put(("stdout", line.strip()))
+            
+            if self.emulator_process:
+                out, err = self.emulator_process.communicate()
+                for l in out.splitlines(): self.emulator_queue.put(("stdout", l))
+                for l in err.splitlines(): self.emulator_queue.put(("stderr", l))
+        except: pass
 
     def _poll_queues(self):
-        # Process Stdout/Stderr
         for _ in range(50):
             try:
                 msg_type, text = self.emulator_queue.get_nowait()
                 if msg_type == "stdout":
                     self.log_view.append(f"<font color='gray'>[Out] {text}</font>")
                     
-                    # NEW: Watch for the LED Status string explicitly
                     if "[Port B] ---> [ LED STATUS:" in text:
                         if "ON" in text:
-                            self.led_indicator.setStyleSheet("background-color: #00FF00; border-radius: 10px; border: 2px solid #005500;") # Green
+                            self.led_indicator.setStyleSheet("background-color: #00FF00; border-radius: 10px; border: 2px solid #005500;")
                         elif "OFF" in text:
-                            self.led_indicator.setStyleSheet("background-color: #550000; border-radius: 10px; border: 2px solid #220000;") # Red
+                            self.led_indicator.setStyleSheet("background-color: #550000; border-radius: 10px; border: 2px solid #220000;")
 
-                    # Attempt to parse JSON if line looks like it
                     if "{" in text and "}" in text:
                         try:
                             json_str = text[text.find("{"):text.rfind("}")+1]
@@ -309,7 +322,6 @@ class MainWindow(QMainWindow):
                     self.log_view.append(f"<font color='red'>[Err] {text}</font>")
             except Empty: break
 
-        # Process Socket JSON
         for _ in range(100):
             try:
                 obj = self.socket_queue.get_nowait()
@@ -323,20 +335,16 @@ class MainWindow(QMainWindow):
 
     def handle_json_event(self, obj):
         t = obj.get("type")
-        
         if t == "reg":
             r, val = obj.get("r"), obj.get("value")
             if isinstance(r, int) and 0 <= r < 32:
                 self.regs[r] = val & 0xFF
                 self._update_reg_table()
-        
         elif t == "mem" and obj.get("space") == "sram":
             addr, val = obj.get("addr"), obj.get("value")
             if addr is not None:
                 self.sram[addr] = val & 0xFF
                 self._update_mem_grid()
-                # LED memory-watching logic removed as it is now handled by stdout parsing
-        
         elif t in ["cpu_state", "instruction", "instr_fetch"]:
             if "pc" in obj: self.PC = obj["pc"]
             if "new_pc" in obj: self.PC = obj["new_pc"]

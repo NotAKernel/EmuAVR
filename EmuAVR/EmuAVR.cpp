@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
 
     if (std::filesystem::path(hexPath).extension() == ".c") {
 
-		std::cout << "[EmuAVR] Toolchain not implemented yet. Please compile your .c file to .hex using avr-gcc and provide the .hex file directly.\n";
+        std::cout << "[EmuAVR] Toolchain not implemented yet. Please compile your .c file to .hex using avr-gcc and provide the .hex file directly.\n";
         return 1;
     }
     else if (std::filesystem::path(hexPath).extension() == ".hex") {

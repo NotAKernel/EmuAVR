@@ -34,7 +34,7 @@ CPU::CPU(Bus& bus, Flash& flash) : bus_(bus), flash_(flash) {
 
 void CPU::reset() {
     PC_ = 0;
-    SP_ = 0x08FF; 
+    SP_ = 0x08FF;
     R_.fill(0);
     SREG_ = 0;
     std::cout << "[CPU] Reset: PC=" << PC_ << " SP=0x" << std::hex << SP_ << std::dec << "\n";
@@ -64,13 +64,13 @@ void CPU::writeReg(uint8_t reg, uint8_t value) {
 }
 
 void CPU::emitJson(const std::string& json) {
-    std::cout << json << std::endl; 
+    std::cout << json << std::endl;
 
     try {
         g_json_server.sendLine(json);
     }
     catch (...) {}
-    
+
 }
 
 uint64_t CPU::run(uint64_t maxCycles) {
@@ -377,7 +377,7 @@ uint32_t CPU::step() {
         PC_ += 1; c = 1;
     }
 
-        // OUT
+    // OUT
     else if ((instr & 0xF800) == 0xB800) {
         uint8_t rr = static_cast<uint8_t>((instr >> 4) & 0x1F);
         uint8_t A = io_addr_extract(instr);
@@ -665,7 +665,7 @@ uint32_t CPU::step() {
         PC_ += 1; c = 1;
     }
 
-	// Unsupported/Unknown Instruction
+    // Unsupported/Unknown Instruction
     else {
         std::ostringstream ss;
         ss << "{\"type\":\"unsupported\",\"pc\":" << PC_ << ",\"word\":\"0x" << std::hex << std::setw(4) << std::setfill('0') << instr << std::dec << "\"}";
