@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
 
     if (std::filesystem::path(hexPath).extension() == ".c") {
 
-		std::cout << "[EmuAVR] Toolchain not implemented yet. Please compile your .c file to .hex using avr-gcc and provide the .hex file directly.\n";
+        std::cout << "[EmuAVR] Toolchain not implemented yet. Please compile your .c file to .hex using avr-gcc and provide the .hex file directly.\n";
         return 1;
     }
     else if (std::filesystem::path(hexPath).extension() == ".hex") {
@@ -106,17 +106,15 @@ int main(int argc, char** argv) {
     auto dummy_io = std::make_shared<Port>("DUMMY_IO");
 
     // Map I/O registers (0x00-0x5F)
-    bus.map(0x0000, 32, dummy_io);    // 0x00-0x1F
-    bus.map(0x0020, 16, portB);       // 0x20-0x2F
-    bus.map(0x0030, 48, dummy_io);    // 0x30-0x5F (Fills the gap for SPH/SPL!)
+    bus.map(0x0023, 3, portB);
 
     // Extended I/O (0x40-0xFF)
-    bus.map(0x0040, 4, spi0);         // SPI
-    bus.map(0x0050, 4, twi0);         // TWI
-    bus.map(0x00C0, 4, uart0);        // UART
+    bus.map(0x004C, 4, spi0);         // SPI
+    bus.map(0x00B8, 6, twi0);         // TWI
+    bus.map(0x00C0, 7, uart0);        // UART 
 
-    // SRAM (0x0060+)
-    bus.map(0x0060, 2048, sram);
+    // SRAM (0x0100+)
+    bus.map(0x0100, 2048, sram);
 
     // EEPROM at data memory space (0x9000+)
     bus.map(0x9000, 512, eeprom);

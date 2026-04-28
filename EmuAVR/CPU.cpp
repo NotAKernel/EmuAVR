@@ -18,13 +18,23 @@ JsonSocketServer& CPU::getJsonServer() {
     return g_json_server;
 }
 
+class CPURegs : public MemoryDevice {
+    CPU& cpu_;
+public:
+    explicit CPURegs(CPU& cpu) : cpu_(cpu) {}
+    uint8_t read(uint16_t addr) override { return cpu_.readReg((uint8_t)addr); }
+    void write(uint16_t addr, uint8_t value) override { cpu_.writeReg((uint8_t)addr, value); }
+};
+
 CPU::CPU(Bus& bus, Flash& flash) : bus_(bus), flash_(flash) {
+    // Map R0-R31 to SRAM space 0x0000 - 0x001F
+    bus_.map(0x0000, 32, std::make_shared<CPURegs>(*this));
     reset();
 }
 
 void CPU::reset() {
     PC_ = 0;
-    SP_ = 0x085F;
+    SP_ = 0x08FF;
     R_.fill(0);
     SREG_ = 0;
     std::cout << "[CPU] Reset: PC=" << PC_ << " SP=0x" << std::hex << SP_ << std::dec << "\n";
@@ -55,12 +65,12 @@ void CPU::writeReg(uint8_t reg, uint8_t value) {
 
 void CPU::emitJson(const std::string& json) {
     std::cout << json << std::endl;
+
     try {
         g_json_server.sendLine(json);
     }
-    catch (...) {
-        // never throw from emitJson; keep behavior robust
-    }
+    catch (...) {}
+
 }
 
 uint64_t CPU::run(uint64_t maxCycles) {
@@ -112,7 +122,7 @@ uint32_t CPU::step() {
         emitJson(ss.str());
     }
 
-    // Small helpers (kept to match project's style)
+    // Helpers
     auto rd_rr_extract = [&](uint16_t w) -> std::pair<uint8_t, uint8_t> {
         uint8_t rd = static_cast<uint8_t>((w >> 4) & 0x1F);
         uint8_t rr = static_cast<uint8_t>((w & 0x0F) | ((w >> 5) & 0x10));
@@ -121,24 +131,24 @@ uint32_t CPU::step() {
 
     auto io_addr_extract = [&](uint16_t w) -> uint8_t {
         uint8_t low4 = static_cast<uint8_t>(w & 0x0F);
-        uint8_t high2 = static_cast<uint8_t>(((w >> 5) & 0x03) << 4);
+        uint8_t high2 = static_cast<uint8_t>(((w >> 9) & 0x03) << 4);
         return static_cast<uint8_t>(low4 | high2);
         };
 
     auto push_byte = [&](uint8_t b) {
-        SP_ = static_cast<uint16_t>(SP_ - 1);
-        bus_.write(SP_, b);
+        bus_.write(SP_, b); // Write first
         std::ostringstream ss;
         ss << "{\"type\":\"mem\",\"op\":\"write\",\"space\":\"sram\",\"addr\":" << SP_ << ",\"value\":" << (int)b << ",\"pc\":" << PC_ << "}";
         emitJson(ss.str());
+        SP_ = static_cast<uint16_t>(SP_ - 1); // Post-decrement
         };
 
     auto pop_byte = [&]() -> uint8_t {
+        SP_ = static_cast<uint16_t>(SP_ + 1); // Pre-increment
         uint8_t v = bus_.read(SP_);
         std::ostringstream ss;
         ss << "{\"type\":\"mem\",\"op\":\"read\",\"space\":\"sram\",\"addr\":" << SP_ << ",\"value\":" << (int)v << ",\"pc\":" << PC_ << "}";
         emitJson(ss.str());
-        SP_ = static_cast<uint16_t>(SP_ + 1);
         return v;
         };
 
@@ -235,7 +245,7 @@ uint32_t CPU::step() {
     }
 
     // CALL (best-effort multiword: 0x940E followed by target word)
-    else if (instr == 0x940E) {
+    else if ((instr & 0xFE0E) == 0x940E) {
         uint16_t target = flash_.fetchWord(PC_ + 1);
         uint16_t returnAddr = static_cast<uint16_t>(PC_ + 2);
         push_byte(static_cast<uint8_t>((returnAddr >> 8) & 0xFF));
@@ -248,7 +258,7 @@ uint32_t CPU::step() {
     }
 
     // JMP (best-effort multiword: 0x940C followed by target)
-    else if (instr == 0x940C) {
+    else if ((instr & 0xFE0E) == 0x940C) {
         uint16_t target = flash_.fetchWord(PC_ + 1);
         uint16_t oldPC = PC_;
         PC_ = target;
@@ -269,63 +279,98 @@ uint32_t CPU::step() {
         c = 4;
     }
 
-    // BRxx family
-    else if (top4 == 0xF000) {
-        uint8_t cond = static_cast<uint8_t>((instr >> 8) & 0x0F);
-        int8_t k8 = static_cast<int8_t>(instr & 0x00FF);
-        bool take = false;
+    // BRxx family (BRBS / BRBC)
+    else if ((instr & 0xF800) == 0xF000) {
+        // Bit 10 determines if branch when the flag is Cleared (1) or Set (0)
+        bool is_brbc = (instr & 0x0400) != 0;
 
-        uint8_t Z = (SREG_ >> 1) & 1;
-        uint8_t C = (SREG_ >> 0) & 1;
-        uint8_t N = (SREG_ >> 2) & 1;
-        uint8_t V = (SREG_ >> 3) & 1;
-        uint8_t S = (SREG_ >> 4) & 1;
+        // Bits 0-2 determine WHICH bit in SREG we are checking
+        uint8_t sreg_bit = instr & 0x07;
 
-        switch (cond) {
-        case 0: take = Z; break;
-        case 1: take = !Z; break;
-        case 2: take = C; break;
-        case 3: take = !C; break;
-        case 4: take = C; break;
-        case 5: take = !C; break;
-        case 6: take = N; break;
-        case 7: take = !N; break;
-        case 8: take = V; break;
-        case 9: take = !V; break;
-        case 10: take = (S == V); break;
-        case 11: take = (S != V); break;
-        default:
-        {
-            std::ostringstream ss; ss << "{\"type\":\"unsupported_branch_cond\",\"pc\":" << PC_ << ",\"cond\":" << (int)cond << "}";
+        // Bits 3-9 hold the 7-bit signed offset
+        uint8_t k7 = (instr >> 3) & 0x7F;
+
+        // Sign-extend the 7-bit value to a standard 8-bit signed integer
+        int8_t offset = (k7 & 0x40) ? static_cast<int8_t>(k7 | 0x80) : static_cast<int8_t>(k7);
+
+        // Evaluate the condition
+        bool bit_set = (SREG_ & (1 << sreg_bit)) != 0;
+        bool take = is_brbc ? !bit_set : bit_set;
+
+        uint16_t oldPC = PC_;
+        if (take) {
+            PC_ = static_cast<uint16_t>(PC_ + 1 + offset);
+            std::ostringstream ss;
+            ss << "{\"type\":\"instruction\",\"pc\":" << oldPC << ",\"mnemonic\":\"" << (is_brbc ? "BRBC" : "BRBS")
+                << "\",\"sreg_bit\":" << (int)sreg_bit << ",\"taken\":true,\"offset\":" << (int)offset
+                << ",\"new_pc\":" << PC_ << ",\"cycles\":2}";
             emitJson(ss.str());
+            c = 2;
+        }
+        else {
+            PC_ += 1;
+            std::ostringstream ss;
+            ss << "{\"type\":\"instruction\",\"pc\":" << oldPC << ",\"mnemonic\":\"" << (is_brbc ? "BRBC" : "BRBS")
+                << "\",\"sreg_bit\":" << (int)sreg_bit << ",\"taken\":false,\"offset\":" << (int)offset
+                << ",\"new_pc\":" << PC_ << ",\"cycles\":1}";
+            emitJson(ss.str());
+            c = 1;
+        }
+    }
+
+    // SBRC / SBRS (Skip if Bit in Register Cleared/Set)
+    else if ((instr & 0xFC08) == 0xFC00) {
+        uint8_t rr = static_cast<uint8_t>((instr >> 4) & 0x1F);
+        uint8_t b = static_cast<uint8_t>(instr & 0x07);
+        bool is_sbrs = (instr & 0x0200) != 0; // Bit 9 distinguishes SBRS (1) from SBRC (0)
+        uint8_t val = readReg(rr);
+        bool bit_set = (val & (1 << b)) != 0;
+
+        std::ostringstream ss;
+        ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"" << (is_sbrs ? "SBRS" : "SBRC") << "\",\"rr\":\"R" << (int)rr << "\",\"bit\":" << (int)b << "}";
+        emitJson(ss.str());
+
+        if (bit_set == is_sbrs) {
+            // Skip next instruction
+            uint16_t next_instr = flash_.fetchWord(PC_ + 1);
+            // 32-bit instructions (CALL, JMP, LDS, STS) take 2 words, so skip 2
+            bool is_32bit = ((next_instr & 0xFE0E) == 0x940E) ||
+                ((next_instr & 0xFE0E) == 0x940C) ||
+                ((next_instr & 0xFE0F) == 0x9000) ||
+                ((next_instr & 0xFE0F) == 0x9200);
+            PC_ += (is_32bit ? 3 : 2);
+            c = (is_32bit ? 3 : 2); // Takes 2 or 3 cycles if skip is taken
+        }
+        else {
             PC_ += 1;
             c = 1;
         }
-        }
+    }
 
-        if (c == 0) {
-            uint16_t oldPC = PC_;
-            if (take) {
-                PC_ = static_cast<uint16_t>(PC_ + 1 + (int)k8);
-                std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << oldPC << ",\"mnemonic\":\"BRxx\",\"cond\":" << (int)cond << ",\"taken\":true,\"offset\":" << (int)k8 << ",\"new_pc\":" << PC_ << ",\"cycles\":2}";
-                emitJson(ss.str());
-                c = 2;
-            }
-            else {
-                PC_ += 1;
-                std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << oldPC << ",\"mnemonic\":\"BRxx\",\"cond\":" << (int)cond << ",\"taken\":false,\"offset\":" << (int)k8 << ",\"new_pc\":" << PC_ << ",\"cycles\":1}";
-                emitJson(ss.str());
-                c = 1;
-            }
-        }
+    // SWAP
+    else if ((instr & 0xFE0F) == 0x9402) {
+        uint8_t d = static_cast<uint8_t>((instr >> 4) & 0x1F);
+        uint8_t val = readReg(d);
+        uint8_t swapped = static_cast<uint8_t>((val << 4) | (val >> 4));
+        writeReg(d, swapped);
+
+        std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"SWAP\",\"reg\":\"R" << (int)d << "\",\"cycles\":1}";
+        emitJson(ss.str());
+        PC_ += 1; c = 1;
     }
 
     // IN
     else if ((instr & 0xF800) == 0xB000) {
         uint8_t rd = static_cast<uint8_t>((instr >> 4) & 0x1F);
         uint8_t A = io_addr_extract(instr);
-        uint16_t memAddr = static_cast<uint16_t>(0x0020 + A);
-        uint8_t val = bus_.read(memAddr);
+        uint8_t val = 0;
+
+        // Intercept Core CPU Registers
+        if (A == 0x3F) val = SREG_;
+        else if (A == 0x3E) val = static_cast<uint8_t>(SP_ >> 8);
+        else if (A == 0x3D) val = static_cast<uint8_t>(SP_ & 0xFF);
+        else val = bus_.read(0x0020 + A);
+
         writeReg(rd, val);
         std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"IN\",\"rd\":\"R" << (int)rd << "\",\"io\":" << (int)A << ",\"value\":" << (int)val << ",\"cycles\":1}";
         emitJson(ss.str());
@@ -336,9 +381,14 @@ uint32_t CPU::step() {
     else if ((instr & 0xF800) == 0xB800) {
         uint8_t rr = static_cast<uint8_t>((instr >> 4) & 0x1F);
         uint8_t A = io_addr_extract(instr);
-        uint16_t memAddr = static_cast<uint16_t>(0x0020 + A);
         uint8_t val = readReg(rr);
-        bus_.write(memAddr, val);
+
+        // Intercept Core CPU Registers
+        if (A == 0x3F) SREG_ = val;
+        else if (A == 0x3E) SP_ = static_cast<uint16_t>((SP_ & 0x00FF) | (val << 8));
+        else if (A == 0x3D) SP_ = static_cast<uint16_t>((SP_ & 0xFF00) | val);
+        else bus_.write(0x0020 + A, val);
+
         std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"OUT\",\"rr\":\"R" << (int)rr << "\",\"io\":" << (int)A << ",\"value\":" << (int)val << ",\"cycles\":1}";
         emitJson(ss.str());
         PC_ += 1; c = 1;
@@ -357,7 +407,7 @@ uint32_t CPU::step() {
     }
 
     // LDS (Load Direct from SRAM) - 32-bit instruction
-    else if ((instr & 0xFE00) == 0x9000) {
+    else if ((instr & 0xFE0F) == 0x9000) {
         uint16_t addr = flash_.fetchWord(PC_ + 1);
         uint8_t d = static_cast<uint8_t>((instr >> 4) & 0x1F);
         uint8_t val = bus_.read(addr);
@@ -373,7 +423,7 @@ uint32_t CPU::step() {
     }
 
     // STS (Store Direct to SRAM) - 32-bit instruction
-    else if ((instr & 0xFE00) == 0x9200) {
+    else if ((instr & 0xFE0F) == 0x9200) {
         uint16_t addr = flash_.fetchWord(PC_ + 1);
         uint8_t d = static_cast<uint8_t>((instr >> 4) & 0x1F);
         uint8_t val = readReg(d);
@@ -390,7 +440,7 @@ uint32_t CPU::step() {
 
     // SUBI
     else if ((instr & 0xF000) == 0x5000) {
-        uint8_t K = static_cast<uint8_t>((instr & 0x000F) | ((instr >> 8) & 0xF0));
+        uint8_t K = static_cast<uint8_t>((instr & 0x000F) | ((instr >> 4) & 0xF0));
         uint8_t d = static_cast<uint8_t>(16 + ((instr >> 4) & 0x0F));
         uint8_t Rdr = readReg(d);
         uint16_t res16 = (uint16_t)Rdr - (uint16_t)K;
@@ -411,7 +461,7 @@ uint32_t CPU::step() {
 
     // ANDI
     else if ((instr & 0xF000) == 0x7000) {
-        uint8_t K = static_cast<uint8_t>((instr & 0x000F) | ((instr >> 8) & 0xF0));
+        uint8_t K = static_cast<uint8_t>((instr & 0x000F) | ((instr >> 4) & 0xF0));
         uint8_t d = static_cast<uint8_t>(16 + ((instr >> 4) & 0x0F));
         uint8_t res = static_cast<uint8_t>(readReg(d) & K);
         writeReg(d, res);
@@ -428,7 +478,7 @@ uint32_t CPU::step() {
 
     // ORI
     else if ((instr & 0xF000) == 0x6000) {
-        uint8_t K = static_cast<uint8_t>((instr & 0x000F) | ((instr >> 8) & 0xF0));
+        uint8_t K = static_cast<uint8_t>((instr & 0x000F) | ((instr >> 4) & 0xF0));
         uint8_t d = static_cast<uint8_t>(16 + ((instr >> 4) & 0x0F));
         uint8_t res = static_cast<uint8_t>(readReg(d) | K);
         writeReg(d, res);
@@ -523,8 +573,9 @@ uint32_t CPU::step() {
         if (top6 == 0x2000) { res = a & b; m = "AND"; }
         else if (top6 == 0x2400) { res = a ^ b; m = "EOR"; }
         else { res = a | b; m = "OR"; }
-        bool Z = (res == 0); bool N = (res & 0x80) != 0; bool V = false; bool S = N ^ V;
-        sreg_set_flag(SREG_, 5, false); sreg_set_flag(SREG_, 0, false); sreg_set_flag(SREG_, 1, Z);
+        bool N = (res & 0x80) != 0; bool V = false; bool S = N ^ V;
+        if (res != 0) sreg_set_flag(SREG_, 1, false);
+        sreg_set_flag(SREG_, 5, false); sreg_set_flag(SREG_, 0, false);
         sreg_set_flag(SREG_, 2, N); sreg_set_flag(SREG_, 3, V); sreg_set_flag(SREG_, 4, S);
         writeReg(rd, res);
         std::ostringstream ss; ss << "{\"type\":\"instruction\",\"pc\":" << PC_ << ",\"mnemonic\":\"" << m << "\",\"rd\":\"R" << (int)rd << "\",\"rr\":\"R" << (int)rr << "\",\"result\":" << (int)res << ",\"cycles\":1}";
@@ -550,7 +601,7 @@ uint32_t CPU::step() {
 
     // CPI
     else if ((instr & 0xF000) == 0x3000) {
-        uint8_t K = static_cast<uint8_t>((instr & 0x000F) | ((instr >> 8) & 0xF0));
+        uint8_t K = static_cast<uint8_t>((instr & 0x000F) | ((instr >> 4) & 0xF0));
         uint8_t d = static_cast<uint8_t>(16 + ((instr >> 4) & 0x0F));
         uint8_t Rdr = readReg(d);
         uint16_t res16 = (uint16_t)Rdr - (uint16_t)K;
@@ -614,7 +665,7 @@ uint32_t CPU::step() {
         PC_ += 1; c = 1;
     }
 
-    // If we reached here, it's unsupported by our heuristics
+    // Unsupported/Unknown Instruction
     else {
         std::ostringstream ss;
         ss << "{\"type\":\"unsupported\",\"pc\":" << PC_ << ",\"word\":\"0x" << std::hex << std::setw(4) << std::setfill('0') << instr << std::dec << "\"}";
