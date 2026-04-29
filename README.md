@@ -1,5 +1,5 @@
 # EmuAVR
-
+(Github Link: https://github.com/NotAKernel/EmuAVR)
 ---
 
 ## How to Use
@@ -14,7 +14,7 @@ The project was developed and built in Visual Studio, thus it is best viewed and
 
 Each time the emulator is modified/updated, the project is built to produce a new .exe file. This file is then moved to the StartUp (/EmuAVR/EmuAVR/StartUp) folder, which is pointed to by the GUI as the location to find the emulator. With this .exe, the GUI can now run the emulator from within itself without the user needing to specify the file location.
 
-> (NOTE: if building the project yourself in either Debug or Release, please ensure your Visual Studio toolset is compatible. If not, install it from the Visual Studio interface. Once successfully built, copy the new .exe (found in /EmuAVR/x64/Debug) into the StartUp folder.)
+> (NOTE: if building the project yourself in either Debug or Release, please ensure your Visual Studio toolset is compatible. If not, install it from the Visual Studio interface. Once successfully built, copy the new .exe (found in /EmuAVR/x64/(Debug or Release)) into the StartUp folder.)
 
 To use the GUI, a .hex file must be loaded. These are located within the EmuAVR project, under 'Tests'. The main test is the 'sram_write_test.hex', as it showcases CPU register read/write and transferring those values to locations in SRAM. The .c version of the file has further explanations, and is one method of writing programs for this project. The 'blink.hex' test showcases the LED working by toggling it on and off until program halt.
 
