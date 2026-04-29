@@ -17,7 +17,6 @@ uint16_t Flash::fetchWord(uint32_t wordAddr) const {
         return 0x0000;
     }
     uint16_t w = words_[wordAddr];
-    // JSON event for fetch could be emitted by CPU; debug print kept minimal
     return w;
 }
 
@@ -31,7 +30,6 @@ bool Flash::loadFromHex(const std::string& path, std::string& error) {
         return false;
     }
 
-    // We'll assemble a byte-addressable buffer first.
     std::vector<uint8_t> bytes;
     uint32_t upperAddr = 0;
     uint32_t maxAddr = 0;

@@ -84,7 +84,6 @@ int main(int argc, char** argv) {
     if (input == "--socket-wait") {
         std::cout << "[EmuAVR] Waiting for GUI to connect on port 5555...\n";
 
-        // Now this call will work perfectly!
         if (CPU::getJsonServer().waitForConnection(30000)) {
             std::cout << "[EmuAVR] GUI Connected! Starting simulation...\n";
         }

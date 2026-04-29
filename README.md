@@ -12,17 +12,29 @@ The project primarily consists of:
 
 The project was developed and built in Visual Studio, thus it is best viewed and used within their IDE. To open it, double click 'EmuAVR.slnx' in your file explorer and choose to open with Visual Studio - or open the project from within the IDE itself.
 
-Each time the emulator is modified/updated, the project is built to produce a new .exe file. This file is then moved to the StartUp folder, which is pointed to by the GUI as the location to find the emulator. With this .exe, the GUI can now run the emulator from within itself without the user needing to specify the file location.
+Each time the emulator is modified/updated, the project is built to produce a new .exe file. This file is then moved to the StartUp (/EmuAVR/EmuAVR/StartUp) folder, which is pointed to by the GUI as the location to find the emulator. With this .exe, the GUI can now run the emulator from within itself without the user needing to specify the file location.
 
-> (NOTE: if building the project yourself in either Debug or Release, please ensure your Visual Studio toolset is compatible. If not, install it from the Visual Studio interface.)
+> (NOTE: if building the project yourself in either Debug or Release, please ensure your Visual Studio toolset is compatible. If not, install it from the Visual Studio interface. Once successfully built, copy the new .exe (found in /EmuAVR/x64/Debug) into the StartUp folder.)
 
-To use the GUI, a .hex file must be loaded. These are located within the EmuAVR project, under 'Tests'. The main test is the 'sram_write_test.hex', as it showcases CPU register read/write and transferring those values to locations in SRAM. The .c version of the file has further explanations, and is one method of writing programs for this project.
+To use the GUI, a .hex file must be loaded. These are located within the EmuAVR project, under 'Tests'. The main test is the 'sram_write_test.hex', as it showcases CPU register read/write and transferring those values to locations in SRAM. The .c version of the file has further explanations, and is one method of writing programs for this project. The 'blink.hex' test showcases the LED working by toggling it on and off until program halt.
 
-In order to produce a compatible INTEL .hex file, you must have the avr-gcc toolchain installed. With it, you can run a command to parse the .c file into a .elf file, and then into a .hex file. The finished version of the project will hopefully have a small version of this toolchain internally packaged (the licence is free), to allow the user to simply pass in the .c file and be returned a .hex file.
+In order to produce a compatible INTEL .hex file, you must have the avr-gcc toolchain installed. With it, you can run a command to parse the .c file into a .elf file, and then into a .hex file. A future version of the project will hopefully have a small version of this toolchain internally packaged (the licence is free), to allow the user to simply pass in the .c file and be returned a .hex file. For now, MinGW is the tool used to convert files.
 
-It is also possible to write a traditional .c file, using branching and iteration as usual, but it is harder to account for the covered instructions that way (see CPU.cpp for all covered instructions).
+> (Chained commands to convert valid C file to Intel HEX, assuming you're already in the directory of the file: avr-gcc -mmcu=atmega328p -Os file_name.c -o file_name.elf; avr-objcopy -O ihex file_name.elf file_name.hex)
+
+The .c files are written using standard AVR instructions, such as LDI (Load Immediate), which are directly interpreted by the avr-gcc toolchain. It is also possible to write a traditional .c file, using branching and iteration as usual, but it is harder to account for the covered instructions that way (see CPU.cpp for all covered instructions).
 
 Once the .hex file is loaded, it runs instantly if it manages to connect to the socket created by the .exe. Using the start commands, as seen in EmuAVR.cpp, it is possible to run the .exe in a CMD line interface, but the GUI is the preferred method.
+
+### Detailed Instructions
+- Start the GUI by double-clicking the 'EmuGUI.exe' file in the base directory of the project, which includes build files for the Python environment. This means you can run it on a machine that doesn't have Python installed. It may take a bit longer for the GUI to open - DO NOT spam click.
+- Once within the GUI, pressing the 'Hex/C' button to load a file will open the File Explorer in the base directory of the project. Navigate EmuAVR -> Tests to find pre-built .hex files along with their .c counterparts.
+- The 'Force Stop' button halts the emulator's execution immediately.
+- The 'Clear All Memory' button clears all registers and CPU state variables (PC, SP, SREG). Before running the emulator each time, the program clears memory automatically already.
+- Use 'Clear Log' to free up the Event Log area.
+- You can enter values into the SRAM field next to the 'Set' button, and then click the button to jump to that area in memory. The arrows shift up and down memory incrementally.
+
+And that's it! You may study the given .c files to understand how the emulator works, along with CPU.cpp to see the instruction implementations.
 
 ---
 

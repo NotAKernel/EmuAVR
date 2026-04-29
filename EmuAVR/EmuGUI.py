@@ -117,7 +117,6 @@ class MainWindow(QMainWindow):
         btn_file.clicked.connect(self.launch_emulator)
         control_layout.addWidget(btn_file)
 
-        # NEW: Force Stop Button
         self.stop_btn = QPushButton("Force Stop")
         self.stop_btn.setStyleSheet("background-color: #ff4d4d; color: white; font-weight: bold;")
         self.stop_btn.clicked.connect(self.force_stop)
@@ -217,7 +216,7 @@ class MainWindow(QMainWindow):
             self._start_emulator()
 
     def _start_emulator(self):
-        exe_path = "./StartUp/EmuAVR.exe" 
+        exe_path = "./EmuAVR/StartUp/EmuAVR.exe" 
         hex_path = self.file_path_label.text().strip()
         
         exe_full = os.path.abspath(exe_path)

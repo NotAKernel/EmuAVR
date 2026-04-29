@@ -27,7 +27,7 @@ public:
 };
 
 CPU::CPU(Bus& bus, Flash& flash) : bus_(bus), flash_(flash) {
-    // Map R0-R31 to SRAM space 0x0000 - 0x001F
+    // Map R0-R31 to 0x0000 - 0x001F
     bus_.map(0x0000, 32, std::make_shared<CPURegs>(*this));
     reset();
 }
@@ -75,15 +75,14 @@ void CPU::emitJson(const std::string& json) {
 
 uint64_t CPU::run(uint64_t maxCycles) {
     uint64_t executed = 0;
-    keep_running_ = true; // Reset the flag when we start
+    keep_running_ = true; // Reset the flag upon start
 
     while (executed < maxCycles && keep_running_) {
         uint32_t c = step();
         if (c == 0) break;
         executed += c;
 
-        // Optional: Check if the GUI is still there
-        // If the socket is dead, there's no point in running
+        // Check if the GUI connection is still alive
         if (!getJsonServer().hasConnection()) {
             std::cout << "[CPU] Socket lost. Stopping...\n";
             break;
@@ -174,7 +173,6 @@ uint32_t CPU::step() {
 
     uint32_t c = 0;
 
-    // 1) Simple control and call/return/branch
     if (instr == 0x0000) { // NOP
         emitJson("{\"type\":\"instruction\",\"pc\":" + std::to_string(PC_) + ",\"mnemonic\":\"NOP\",\"cycles\":1}");
         PC_ += 1; c = 1;
@@ -281,10 +279,10 @@ uint32_t CPU::step() {
 
     // BRxx family (BRBS / BRBC)
     else if ((instr & 0xF800) == 0xF000) {
-        // Bit 10 determines if branch when the flag is Cleared (1) or Set (0)
+        // Bit 10 determines if program branches when the flag is Cleared (1) or Set (0)
         bool is_brbc = (instr & 0x0400) != 0;
 
-        // Bits 0-2 determine WHICH bit in SREG we are checking
+        // Bits 0-2 determine WHICH bit in SREG is being checked
         uint8_t sreg_bit = instr & 0x07;
 
         // Bits 3-9 hold the 7-bit signed offset

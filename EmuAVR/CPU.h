@@ -18,14 +18,14 @@ public:
     uint8_t readReg(uint8_t reg);
     void writeReg(uint8_t reg, uint8_t value);
 
-    // Run until halt or cycle limit. Emits JSON events to stdout.
+    // Run until halt or cycle limit. Emits JSON events to stdout, interpreted by the GUI
     // Returns total cycles executed.
     uint64_t run(uint64_t maxCycles);
 
     // Single step: executes one instruction, returns cycles consumed (or 0 on halt)
     uint32_t step();
 
-    // Direct access to bus for demo
+    // Direct access to bus
     Bus& bus();
 
     void stop() { keep_running_ = false; }
@@ -36,7 +36,7 @@ public:
 private:
     Bus& bus_;
     Flash& flash_;
-    uint16_t PC_; // word address
+	uint16_t PC_; // word address / instruction address
     uint16_t SP_;
     std::array<uint8_t, 32> R_;
     uint8_t SREG_;
